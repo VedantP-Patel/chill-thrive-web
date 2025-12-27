@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import Navbar from "@/components/Navbar"; // IMPORT THE MODULE
+import Navbar from "@/components/Navbar"; 
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -18,11 +18,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        {/* THE NAVBAR IS WIRED HERE */}
         <Navbar /> 
         
-        {/* THIS IS WHERE THE PAGE CONTENT (Hero, Services) LOADS */}
-        <main className="pt-16"> 
+        {/* FIX: Removed 'pt-16'. Now the content slides UNDER the navbar. */}
+        <main className=""> 
           {children}
         </main>
       </body>

@@ -23,7 +23,8 @@ export default async function Home() {
     <main className="min-h-screen">
       
       {/* --- HERO SECTION --- */}
-      <section className="relative h-[90vh] md:h-[85vh] flex flex-col items-center justify-center text-center px-4 text-white overflow-hidden">
+      {/* Add 'mt-[-80px]' or 'top-0' to pull it up behind the navbar */}
+        <section className="relative h-[100vh] flex flex-col items-center justify-center text-center px-4 text-white overflow-hidden mt-[-80px] ">
         
         <div className="absolute top-0 left-0 w-full h-full block md:hidden z-0">
              <Image src="/hero-mobile.png" alt="Vertical Spa" fill className="object-cover select-none" priority quality={100} unoptimized />
