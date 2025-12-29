@@ -130,7 +130,7 @@ export default function BookForm({ services, qrCodeUrl }: BookFormProps) {
 
       if (date === todayStr) {
         const nowMins = new Date().getHours() * 60 + new Date().getMinutes();
-        finalSlots = finalSlots.filter(s => toMins(s) > nowMins);
+        finalSlots = finalSlots.filter((s: string) => toMins(s) > nowMins);
       }
       setAvailableSlots(finalSlots);
     };
