@@ -116,7 +116,7 @@ export default function BookForm({ services, qrCodeUrl }: BookFormProps) {
             const durationMins = parseInt(b.duration) || 60; 
             const endMins = startMins + durationMins;
             
-            rawSlots.forEach(slot => { 
+            rawSlots.forEach((slot: string) => { 
                 const slotStart = toMins(slot); 
                 if (slotStart >= startMins && slotStart < endMins) { 
                     bookedCounts[slot] = (bookedCounts[slot] || 0) + 1; 
