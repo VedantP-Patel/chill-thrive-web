@@ -126,7 +126,7 @@ export default function BookForm({ services, qrCodeUrl }: BookFormProps) {
       }
 
       const capacity = selectedService.capacity || 1;
-      let finalSlots = rawSlots.filter(slot => (bookedCounts[slot] || 0) < capacity);
+      let finalSlots = rawSlots.filter((slot: string) => (bookedCounts[slot] || 0) < capacity);
 
       if (date === todayStr) {
         const nowMins = new Date().getHours() * 60 + new Date().getMinutes();
