@@ -4,14 +4,11 @@ const nextConfig: NextConfig = {
   images: {
     remotePatterns: [
       {
-        protocol: 'https',
-        hostname: 'images.unsplash.com', // Keep Unsplash
-      },
-      {
-        protocol: 'https',
-        hostname: '**.supabase.co',      // Add Supabase (Wildcard)
+        protocol: "https",
+        hostname: "**", // Allows ALL external images
       },
     ],
+    unoptimized: true, // Crucial for fixing "broken" images during dev
   },
 };
 

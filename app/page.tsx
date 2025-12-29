@@ -1,120 +1,205 @@
-import Link from "next/link";
-import Image from "next/image";
-import TypewriterTitle from "@/components/TypewriterTitle";
+"use client";
+
+import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import Link from "next/link";
+import HomeGallerySlider from "@/components/HomeGallerySlider";
 
-export default async function Home() {
-  
-  // 1. FETCH DATA (Now asking for 'previous_price')
-  const { data: services, error } = await supabase
-    .from("services")
-    .select("title, description, price, previous_price, image_url, booking_image_url") // <--- ADDED previous_price
-    .eq("is_active", true)
-    .order("id", { ascending: true });
+// FALLBACK: If a database image fails, this generic "Relaxing Water" image shows instead.
+const FALLBACK_IMG = "https://images.unsplash.com/photo-1600334089648-b0d9d3028eb2?q=80&w=1000&auto=format&fit=crop";
 
-  const fallbackImages = [
-    "https://images.unsplash.com/photo-1544161515-4ab6ce6db874?q=80&w=1000&auto=format&fit=crop", 
-    "https://images.unsplash.com/photo-1600334089648-b0d9d3028eb2?q=80&w=1000&auto=format&fit=crop", 
-    "https://images.unsplash.com/photo-1540555700478-4be289fbecef?q=80&w=1000&auto=format&fit=crop", 
-    "https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?q=80&w=1000&auto=format&fit=crop", 
-  ];
+export default function Home() {
+  const [testimonials, setTestimonials] = useState<any[]>([]);
+  const [services, setServices] = useState<any[]>([]); 
+  const [gallery, setGallery] = useState<any[]>([]);
+  const [founder, setFounder] = useState<any>(null);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      const { data: t } = await supabase.from("testimonials").select("*").eq("is_active", true).limit(3);
+      if (t) setTestimonials(t);
+      
+      const { data: s } = await supabase.from("services").select("*").eq("is_active", true).limit(4);
+      if (s) setServices(s);
+      
+      const { data: g } = await supabase.from("gallery_images").select("*").limit(5);
+      if (g) setGallery(g);
+      
+      const { data: f } = await supabase.from("founder_profile").select("*").single();
+      if (f) setFounder(f);
+    };
+    fetchData();
+  }, []);
 
   return (
-    <main className="min-h-screen">
+    <main className="min-h-screen bg-white text-slate-900 font-sans">
       
-      {/* --- HERO SECTION --- */}
-      {/* Add 'mt-[-80px]' or 'top-0' to pull it up behind the navbar */}
-        <section className="relative h-[100vh] flex flex-col items-center justify-center text-center px-4 text-white overflow-hidden mt-[-80px] ">
-        
-        <div className="absolute top-0 left-0 w-full h-full block md:hidden z-0">
-             <Image src="/hero-mobile.png" alt="Vertical Spa" fill className="object-cover select-none" priority quality={100} unoptimized />
-        </div>
-         <div className="absolute top-0 left-0 w-full h-full hidden md:block z-0">
-            <Image src="/hero-desktop.png" alt="Horizontal Spa" fill className="object-cover select-none" priority quality={100} unoptimized />
+      {/* --- 1. HERO SECTION --- */}
+      <section className="relative h-screen flex items-center justify-center overflow-hidden">
+        {/* Background */}
+        <div className="absolute inset-0 z-0">
+             <div className="absolute inset-0 bg-black/40 z-10"></div>
+             {/* Using standard img for stability */}
+             <img 
+                src="https://images.unsplash.com/photo-1544367563-12123d896889?q=80&w=2070" 
+                alt="Ice Bath Hero" 
+                className="w-full h-full object-cover"
+             />
         </div>
 
-        <div className="absolute inset-0 bg-gradient-to-b from-slate-900/70 via-blue-900/50 to-black mix-blend-multiply z-10"></div>
-
-        <div className="relative z-20 max-w-4xl space-y-6 mt-20">
-          <TypewriterTitle />
-          <p className="text-xl md:text-2xl text-blue-100/90 font-light max-w-2xl mx-auto leading-relaxed drop-shadow-sm">
-            Master your recovery. Elevate your performance.
+        <div className="relative z-20 text-center text-white max-w-4xl px-6">
+          <h1 className="text-6xl md:text-8xl lg:text-9xl font-black tracking-tighter mb-4 animate-fade-in-up drop-shadow-lg">
+            CHILL.THRIVE
+          </h1>
+          <p className="text-xl md:text-2xl font-light tracking-wide mb-10 text-slate-100 animate-fade-in-up delay-100">
+            Rejuvenate your body. Reset your mind.
           </p>
-          <div className="flex flex-col md:flex-row gap-4 md:gap-6 justify-center mt-8">
-            <Link href="/book" className="bg-white text-slate-900 px-8 py-3 md:px-10 md:py-4 rounded-xl font-medium hover:bg-blue-50 transition-all duration-300 shadow-lg hover:shadow-xl hover:-translate-y-1 w-full md:w-auto">
-              Book Session
+          <div className="flex flex-col md:flex-row gap-4 justify-center items-center animate-fade-in-up delay-200">
+            <Link href="/book" className="px-10 py-4 bg-cyan-400 text-black rounded-full font-bold text-sm uppercase tracking-widest hover:bg-cyan-300 transition-all hover:scale-105 shadow-[0_0_20px_rgba(34,211,238,0.6)]">
+              Book a Session
             </Link>
-            <Link href="#services" className="px-8 py-3 md:px-10 md:py-4 rounded-xl font-medium text-white border border-white/30 hover:bg-white/10 transition-all duration-300 backdrop-blur-md w-full md:w-auto">
-              Explore Menu
+            <Link href="#services" className="px-10 py-4 border border-white text-white rounded-full font-bold text-sm uppercase tracking-widest hover:bg-white hover:text-black transition-all">
+              Explore Services
             </Link>
           </div>
         </div>
       </section>
 
-      {/* --- SERVICES SECTION --- */}
-      <section id="services" className="py-24 px-4 md:px-20"
-        style={{ background: "linear-gradient(to bottom, #000000 0%, #000000 20%, #1e3a8a 50%, #7dd3fc 85%, #ffffff 100%)" }}>
-        
-        <div className="text-center mb-24">
-          <h2 className="text-3xl font-light text-white tracking-wide uppercase drop-shadow-md">Recovery Menu</h2>
-          <div className="w-24 h-0.5 bg-white mx-auto mt-4 rounded-full opacity-40 shadow-[0_0_10px_white]"></div>
-        </div>
-        
-        <div className="max-w-7xl mx-auto space-y-24 md:space-y-32">
-          {services && services.length > 0 ? (
-            services.map((service: any, index: number) => {
-              const isEven = index % 2 === 0;
-              const finalImage = service.image_url 
-                ? service.image_url 
-                : (service.booking_image_url ? service.booking_image_url : fallbackImages[index % fallbackImages.length]);
-
-              const isDeepZone = index < 2; 
-
-              return (
-                <div key={index} className={`flex flex-col md:flex-row items-center gap-12 md:gap-20 ${isEven ? "" : "md:flex-row-reverse"}`}>
-                  
-                  <div className="flex-1 space-y-6 text-center md:text-left">
-                    <div className={`inline-block px-3 py-1 text-xs font-bold tracking-widest uppercase rounded-full mb-2 border ${isDeepZone ? "bg-gray-900/80 text-blue-200 border-gray-700" : "bg-blue-100 text-blue-900 border-blue-200"}`}>
-                      0{index + 1}
-                    </div>
-                    <h3 className={`text-3xl md:text-4xl font-light ${isDeepZone ? "text-white" : "text-slate-900"}`}>{service.title}</h3>
-                    <p className={`text-lg leading-relaxed font-medium ${isDeepZone ? "text-gray-400" : "text-slate-600"}`}>{service.description}</p>
-                    
-                    {/* --- PRICE / BOOK BUTTON SECTION --- */}
-                    <div className="pt-4">
-                      <Link href="/book" className={`font-bold border-b-2 pb-1 transition-all flex items-center gap-3 w-fit mx-auto md:mx-0 ${isDeepZone ? "text-blue-300 border-blue-500/30 hover:text-white hover:border-white" : "text-blue-900 border-blue-900/30 hover:border-blue-900"}`}>
-                        
-                        <span>Book for</span>
-                        
-                        <div className="flex items-center gap-2">
-                          {/* SHOW PREVIOUS PRICE (Strikethrough) IF IT EXISTS */}
-                          {service.previous_price && (
-                            <span className="text-sm line-through opacity-60">₹{service.previous_price}</span>
-                          )}
-                          
-                          {/* CURRENT PRICE */}
-                          <span className="text-lg">₹{service.price}</span>
+      {/* --- 2. SERVICES PREVIEW --- */}
+      <section id="services" className="py-24 px-6 bg-zinc-50">
+        <div className="max-w-7xl mx-auto">
+            <div className="text-center mb-16">
+                <h2 className="text-blue-600 font-bold uppercase tracking-widest text-xs mb-2">Recovery Menu</h2>
+                <h3 className="text-4xl md:text-5xl font-black tracking-tight text-slate-900">CHOOSE YOUR THERAPY</h3>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                {(services.length > 0 ? services : [
+                    { title: "Ice Bath", description: "Reduce inflammation instantly.", image_url: "https://images.unsplash.com/photo-1583562835057-a62d1beffbf3?q=80&w=600" },
+                    { title: "Jacuzzi", description: "Heat therapy for deep relaxation.", image_url: "https://images.unsplash.com/photo-1560625699-75a7e828d542?q=80&w=600" },
+                    { title: "Steam Bath", description: "Detoxify and clear your mind.", image_url: "https://images.unsplash.com/photo-1626305987793-27a3c3c5453e?q=80&w=600" },
+                    { title: "Combo Therapy", description: "The ultimate contrast protocol.", image_url: "https://images.unsplash.com/photo-1544161515-4ab6ce6db874?q=80&w=600" }
+                ]).map((s, i) => (
+                    <Link key={i} href="/book" className="group block bg-white rounded-3xl overflow-hidden border border-zinc-100 hover:border-blue-500 hover:shadow-2xl transition-all duration-500">
+                        <div className="h-64 relative overflow-hidden bg-gray-200">
+                            <img 
+                                src={s.image_url || s.img || FALLBACK_IMG} 
+                                alt={s.title || "Service"} 
+                                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                                onError={(e) => {
+                                    // If image fails, swap source to fallback instantly
+                                    (e.target as HTMLImageElement).src = FALLBACK_IMG;
+                                }}
+                            />
+                            <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent transition-colors"></div>
                         </div>
-                        
-                        <span>&rarr;</span>
-                      </Link>
-                    </div>
-
-                  </div>
-
-                  <div className={`flex-1 w-full h-[400px] relative group overflow-hidden rounded-2xl shadow-2xl border-4 ${isDeepZone ? "border-gray-800" : "border-white"}`}>
-                     <Image src={finalImage} alt={service.title} fill className="object-cover transition-transform duration-700 group-hover:scale-105" />
-                     <div className={`absolute inset-0 group-hover:bg-transparent transition-all duration-500 ${isDeepZone ? "bg-black/40" : "bg-blue-900/5"}`}></div>
-                  </div>
-
-                </div>
-              );
-            })
-          ) : (
-            <div className="text-center py-20 text-gray-500 font-medium">No active services available.</div>
-          )}
+                        <div className="p-8">
+                            <h4 className="font-bold text-xl mb-2 group-hover:text-blue-600 transition-colors">{s.title}</h4>
+                            <p className="text-sm text-gray-500 line-clamp-2 mb-6">{s.description || s.desc}</p>
+                            <span className="inline-block text-xs font-black uppercase tracking-widest border-b-2 border-black group-hover:border-blue-600 group-hover:text-blue-600 pb-1">
+                                Book Now
+                            </span>
+                        </div>
+                    </Link>
+                ))}
+            </div>
         </div>
       </section>
+
+      {/* --- 3. WHY CHILL THRIVE --- */}
+      <section className="py-24 px-6 bg-slate-950 text-white relative">
+        <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-blue-600/10 rounded-full blur-[120px] pointer-events-none"></div>
+        <div className="max-w-7xl mx-auto relative z-10">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 text-center md:text-left">
+                {[
+                    { icon: "🔬", title: "Science-Backed", text: "Protocols based on physiology data." },
+                    { icon: "👨‍⚕️", title: "Trained Pros", text: "Certified guides ensure your safety." },
+                    { icon: "✨", title: "Premium Hygiene", text: "Medical-grade filtration systems." },
+                    { icon: "🤝", title: "Community", text: "Join a tribe of disciplined individuals." }
+                ].map((item, i) => (
+                    <div key={i} className="p-8 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition-colors">
+                        <div className="text-4xl mb-4">{item.icon}</div>
+                        <h4 className="font-bold text-lg mb-2 text-cyan-400">{item.title}</h4>
+                        <p className="text-zinc-400 text-sm leading-relaxed">{item.text}</p>
+                    </div>
+                ))}
+            </div>
+        </div>
+      </section>
+
+      {/* --- 4. TESTIMONIALS --- */}
+      <section className="bg-white py-24 px-6">
+        <div className="max-w-7xl mx-auto">
+            <div className="flex flex-col md:flex-row justify-between items-end mb-12 gap-4">
+                <div>
+                    <h2 className="text-blue-600 font-bold uppercase tracking-widest text-xs mb-2">Success Stories</h2>
+                    <h3 className="text-4xl font-black tracking-tight">REAL RESULTS</h3>
+                </div>
+                <Link href="/gallery" className="px-6 py-2 border border-slate-300 rounded-full text-xs font-bold uppercase hover:bg-black hover:text-white transition-all">
+                    View All Stories
+                </Link>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                {testimonials.length > 0 ? testimonials.map(t => (
+                    <div key={t.id} className="bg-slate-50 p-8 rounded-3xl border border-slate-100 relative">
+                        <div className="text-yellow-400 text-xs mb-4">{"★".repeat(t.rating)}</div>
+                        <p className="text-slate-600 italic mb-6 leading-relaxed">"{t.message}"</p>
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center font-bold text-blue-600">
+                                {t.name[0]}
+                            </div>
+                            <div>
+                                <p className="font-bold text-sm text-slate-900">{t.name}</p>
+                                <p className="text-[10px] font-bold uppercase text-slate-400">{t.role}</p>
+                            </div>
+                        </div>
+                    </div>
+                )) : (
+                   <div className="col-span-3 text-center py-12 text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                      Add testimonials in Admin to see them here.
+                   </div>
+                )}
+            </div>
+        </div>
+      </section>
+
+      {/* --- 5. FOUNDER --- */}
+      {founder && (
+        <section className="py-24 px-6 bg-black text-white text-center">
+            <div className="max-w-4xl mx-auto">
+                <blockquote className="text-3xl md:text-5xl font-black tracking-tight leading-tight mb-8">
+                    "{founder.quote}"
+                </blockquote>
+                <div className="flex flex-col items-center gap-4">
+                    <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-white relative">
+                        <img 
+                            src={founder.image_url || FALLBACK_IMG} 
+                            alt="Founder" 
+                            className="w-full h-full object-cover"
+                        />
+                    </div>
+                    <div>
+                        <p className="font-bold text-lg">{founder.name}</p>
+                        <p className="text-cyan-400 text-xs font-bold uppercase tracking-widest">{founder.role}</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+      )}
+
+      {/* --- 6. CTA --- */}
+      <section className="py-24 px-6 bg-zinc-100 text-center">
+        <div className="max-w-4xl mx-auto">
+            <h2 className="text-4xl md:text-7xl font-black tracking-tighter mb-8 leading-none text-slate-900">
+                START YOUR <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-500 to-cyan-400">RECOVERY</span> TODAY.
+            </h2>
+            <Link href="/book" className="inline-block px-12 py-5 bg-black text-white rounded-full font-bold text-lg uppercase tracking-widest hover:bg-zinc-800 hover:scale-105 transition-all shadow-xl">
+                Book Your First Session
+            </Link>
+        </div>
+      </section>
+
     </main>
   );
 }
