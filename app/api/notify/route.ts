@@ -1,6 +1,4 @@
 import { NextResponse } from 'next/server';
-import { Resend } from 'resend';
-import twilio from 'twilio';
 
 export async function POST(req: Request) {
   const { type, booking } = await req.json();
