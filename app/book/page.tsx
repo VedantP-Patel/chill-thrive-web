@@ -6,6 +6,15 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 const FALLBACK_IMG = "https://images.unsplash.com/photo-1600334089648-b0d9d3028eb2?q=80&w=1000";
 
+// --- TYPES (Synced with Admin V3.5) ---
+type Variant = { id: string; duration: string; price: number; old_price?: number; active: boolean };
+type Service = { 
+  id: number; title: string; description: string; type: string; 
+  image_url: string; booking_image_url?: string; badge?: string; benefits?: string[];
+  capacity: number; variants: Variant[]; is_active: boolean;
+};
+type Coupon = { code: string; discount_value: number; type: string };
+
 // --- 1. CORE COMPONENT ---
 function BookingContent() {
   const router = useRouter();
@@ -13,14 +22,14 @@ function BookingContent() {
   const preSelectedId = searchParams.get('serviceId');
 
   // --- STATE ---
-  const [services, setServices] = useState<any[]>([]);
+  const [services, setServices] = useState<Service[]>([]);
   const [adminSettings, setAdminSettings] = useState<any>({});
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterType, setFilterType] = useState<"all" | "single" | "package">("all");
+  const [filterType, setFilterType] = useState<"all" | "single" | "combo">("all");
   
-  // Selection
-  const [selectedService, setSelectedService] = useState<any | null>(null);
-  const [duration, setDuration] = useState<"60" | "30">("60");
+  // Selection Logic
+  const [selectedService, setSelectedService] = useState<Service | null>(null);
+  const [selectedVariant, setSelectedVariant] = useState<Variant | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<"qr" | "cash">("qr");
   
   // Form
@@ -30,7 +39,7 @@ function BookingContent() {
   });
 
   // Logic
-  const [appliedCoupon, setAppliedCoupon] = useState<{code: string, value: number, type: string} | null>(null);
+  const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(null);
   const [discountAmount, setDiscountAmount] = useState(0);
   const [availableSlots, setAvailableSlots] = useState<string[]>([]);
   const [isDayClosed, setIsDayClosed] = useState(false);
@@ -40,22 +49,33 @@ function BookingContent() {
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [success, setSuccess] = useState(false);
 
-  // --- FETCH & AUTO-SELECT ---
+  // --- FETCH DATA ---
   useEffect(() => {
     const fetchData = async () => {
-      // Services
-      const { data: s } = await supabase.from("services").select("*").eq("is_active", true).order("price");
+      // 1. Services & Variants
+      const { data: s } = await supabase.from("services").select("*").eq("is_active", true).order("id");
       if (s) {
-          setServices(s);
+          // Normalize variants if empty
+          const cleaned = s.map((item: any) => ({
+             ...item,
+             variants: (item.variants && item.variants.length > 0) 
+                ? item.variants.filter((v:any) => v.active) // Only show active variants
+                : [{ id: 'default', duration: 'Standard', price: item.price, old_price: item.previous_price, active: true }] // Fallback for legacy data
+          }));
+          
+          setServices(cleaned);
+
+          // Auto-Select Logic
           if (preSelectedId) {
-              const found = s.find((item: any) => item.id === Number(preSelectedId));
-              if (found) setSelectedService(found);
-              else if (!selectedService && s.length > 0) setSelectedService(s[0]);
+              const found = cleaned.find((item: Service) => item.id === Number(preSelectedId));
+              if (found) handleServiceSelect(found);
+              else if (cleaned.length > 0) handleServiceSelect(cleaned[0]);
           } else {
-              if (!selectedService && s.length > 0) setSelectedService(s[0]);
+              if (cleaned.length > 0) handleServiceSelect(cleaned[0]);
           }
       }
-      // Settings
+
+      // 2. Settings
       const { data: set } = await supabase.from("settings").select("*");
       if (set) {
         const map: any = {};
@@ -66,16 +86,20 @@ function BookingContent() {
     fetchData();
   }, [preSelectedId]);
 
+  // Helper: Select Service & Default Variant
+  const handleServiceSelect = (s: Service) => {
+      setSelectedService(s);
+      // Auto-select first available variant
+      if (s.variants && s.variants.length > 0) {
+          setSelectedVariant(s.variants[0]);
+      }
+      setFormData(prev => ({ ...prev, time: "" })); // Reset time on service change
+  };
+
   // --- FILTERING ---
   const filteredServices = services.filter(s => {
       const term = searchTerm.toLowerCase().trim();
-      const matchesSearch = 
-        !term || 
-        s.title.toLowerCase().includes(term) || 
-        s.description?.toLowerCase().includes(term) ||
-        s.badge?.toLowerCase().includes(term) ||
-        (s.type === 'combo' && 'combo'.includes(term));
-
+      const matchesSearch = !term || s.title.toLowerCase().includes(term) || s.description?.toLowerCase().includes(term);
       const matchesType = filterType === "all" ? true : s.type === filterType;
       return matchesSearch && matchesType;
   });
@@ -88,12 +112,11 @@ function BookingContent() {
     else { setAppliedCoupon(null); alert("❌ Invalid Code"); }
   };
 
-  // --- SCHEDULE ---
+  // --- SCHEDULE LOGIC ---
   useEffect(() => {
     const fetchAvailability = async () => {
       setAvailableSlots([]); setIsDayClosed(false); setSlotStatus("Checking..."); 
-      setFormData(prev => ({ ...prev, time: "" })); 
-
+      
       if (!formData.date || !selectedService) { setSlotStatus("Select Date"); return; }
       
       setLoadingSlots(true);
@@ -105,16 +128,17 @@ function BookingContent() {
           const { data: schedules } = await supabase.from("schedules").select("*");
           if (!schedules) return;
 
-          let activeRule = schedules.find(s => s.type === 'custom' && s.date === formData.date && s.service_id === selectedService.id);
-          if (!activeRule) activeRule = schedules.find(s => s.type === 'custom' && s.date === formData.date && s.service_id === null);
-          if (!activeRule) activeRule = schedules.find(s => s.type === dayType && s.service_id === selectedService.id);
-          if (!activeRule) activeRule = schedules.find(s => s.type === dayType && s.service_id === null);
+          // Hierarchy: Custom Date > Day Type
+          let activeRule = schedules.find(s => s.type === 'custom' && s.date === formData.date);
+          if (!activeRule) activeRule = schedules.find(s => s.type === dayType);
 
           if (!activeRule || activeRule.is_closed) { 
               setIsDayClosed(true); setSlotStatus("⛔ Closed Today"); setLoadingSlots(false); return; 
           }
 
           let rawSlots = activeRule.slots || [];
+          
+          // Filter Past Times
           if (formData.date === todayStr) {
               const now = new Date();
               const currMins = now.getHours()*60 + now.getMinutes();
@@ -125,7 +149,9 @@ function BookingContent() {
               });
           }
 
-          const { data: bookings } = await supabase.from("bookings").select("time").eq("booking_date", formData.date).eq("service_id", selectedService.id).neq("status", "cancelled");
+          // Filter Full Slots
+          const { data: bookings } = await supabase.from("bookings").select("time").eq("booking_date", formData.date).eq("service_type", selectedService.title).neq("status", "cancelled");
+          
           if (bookings) {
               const counts: any = {}; bookings.forEach((b: any) => counts[b.time]=(counts[b.time]||0)+1);
               rawSlots = rawSlots.filter((s: string) => (counts[s]||0) < selectedService.capacity);
@@ -139,18 +165,18 @@ function BookingContent() {
     fetchAvailability();
   }, [formData.date, selectedService]);
 
-  // --- PRICE ---
-  const currentPrice = selectedService ? (duration === "30" ? (selectedService.price_30 || selectedService.price) : selectedService.price) : 0;
+  // --- PRICE CALCULATION ---
+  const currentPrice = selectedVariant ? selectedVariant.price : 0;
   
   useEffect(() => {
-    if (!selectedService) return;
+    if (!selectedVariant) return;
     const base = currentPrice * formData.guests;
     let d = 0;
     if (appliedCoupon) {
         d = appliedCoupon.type==='percent' ? Math.round((base*appliedCoupon.discount_value)/100) : appliedCoupon.discount_value;
     }
     setDiscountAmount(d);
-  }, [selectedService, duration, formData.guests, appliedCoupon, currentPrice]);
+  }, [selectedVariant, formData.guests, appliedCoupon, currentPrice]);
 
   const finalTotal = (currentPrice * formData.guests) - discountAmount;
 
@@ -168,9 +194,9 @@ function BookingContent() {
 
     setLoading(true);
     const { error } = await supabase.from("bookings").insert([{
-      service_id: selectedService.id, 
-      service_type: selectedService.title, 
-      duration: `${duration} Min`,
+      service_id: selectedService?.id, 
+      service_type: selectedService?.title, 
+      duration: selectedVariant?.duration || "Standard", // Store the specific variant name
       user_name: formData.name, 
       user_email: formData.email, 
       user_phone: formData.phone,
@@ -180,7 +206,9 @@ function BookingContent() {
       status: paymentMethod==='qr'?'payment_review':'pending',
       payment_method: paymentMethod==='qr'?'QR Code':'Pay at Venue',
       transaction_id: formData.utr||"N/A", 
-      total_amount: finalTotal
+      total_amount: finalTotal,
+      coupon_code: appliedCoupon?.code || null,
+      discount_amount: discountAmount
     }]);
 
     if(error) alert(error.message); 
@@ -188,6 +216,7 @@ function BookingContent() {
     setLoading(false);
   };
 
+  // SUCCESS SCREEN
   if (success) return (
     <div className="min-h-screen flex items-center justify-center bg-zinc-50 p-6">
         <div className="bg-white p-8 md:p-12 rounded-[2rem] shadow-xl text-center max-w-md w-full border border-green-100 animate-fade-in-up">
@@ -203,7 +232,7 @@ function BookingContent() {
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans pt-20 pb-32 md:pb-20 px-4 md:px-8">
       <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8 h-full">
         
-        {/* --- LEFT: SEARCH & LIST (RICH UI RESTORED) --- */}
+        {/* --- LEFT: SEARCH & LIST --- */}
         <div className="lg:col-span-7 flex flex-col h-full lg:h-[calc(100vh-8rem)]">
             
             {/* HEADER */}
@@ -213,13 +242,9 @@ function BookingContent() {
                         <h1 className="text-4xl md:text-5xl font-black tracking-tighter mb-1">PROTOCOL</h1>
                         <p className="text-slate-500 text-sm">Select your recovery session.</p>
                     </div>
-                    <div className="bg-white p-1 rounded-xl shadow-sm border inline-flex self-start md:self-auto">
-                        <button onClick={()=>setDuration("60")} className={`px-4 py-2 rounded-lg text-xs font-bold uppercase transition-all ${duration==="60"?"bg-black text-white shadow":"text-slate-400 hover:text-black"}`}>60 Mins</button>
-                        <button onClick={()=>setDuration("30")} className={`px-4 py-2 rounded-lg text-xs font-bold uppercase transition-all ${duration==="30"?"bg-black text-white shadow":"text-slate-400 hover:text-black"}`}>30 Mins</button>
-                    </div>
                 </div>
 
-                {/* SEARCH */}
+                {/* SEARCH & FILTER */}
                 <div className="flex flex-col sm:flex-row gap-3 h-auto sm:h-12">
                     <div className="relative flex-1 h-12 sm:h-full">
                         <input 
@@ -232,79 +257,62 @@ function BookingContent() {
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">🔍</span>
                     </div>
                     <div className="flex gap-1 h-12 sm:h-full bg-white p-1 rounded-xl border border-zinc-200 shrink-0">
-    {["all", "single", "package"].map(t => (
-        <button 
-            key={t} 
-            onClick={()=>setFilterType(t as any)} 
-            className={`px-4 h-full rounded-lg text-[10px] font-bold uppercase transition-all ${filterType===t?"bg-black text-white":"text-slate-500 hover:bg-slate-100"}`}
-        >
-            {t === 'package' ? 'Combos' : t}
-        </button>
-    ))}
-</div>
+                        {["all", "single", "combo"].map(t => (
+                            <button 
+                                key={t} 
+                                onClick={()=>setFilterType(t as any)} 
+                                className={`px-4 h-full rounded-lg text-[10px] font-bold uppercase transition-all ${filterType===t?"bg-black text-white":"text-slate-500 hover:bg-slate-100"}`}
+                            >
+                                {t}
+                            </button>
+                        ))}
+                    </div>
                 </div>
             </div>
 
-            {/* LIST (With Large Images & Badges) */}
+            {/* SERVICE LIST */}
             <div className="flex-1 overflow-y-auto p-4 -m-4 space-y-4 custom-scrollbar">
                 {filteredServices.length === 0 ? (
                     <div className="text-center py-20 text-slate-400 border-2 border-dashed rounded-3xl">No services found.</div>
                 ) : (
                     filteredServices.map((s) => {
-// Inside filteredServices.map
-const price = duration === "30" ? (s.price_30 || s.price) : s.price;
-const prev = duration === "30" ? s.previous_price_30 : s.previous_price;
-                        
+                        // Display price logic: "Starts from" lowest active variant
+                        const minPrice = s.variants?.length ? Math.min(...s.variants.map(v => v.price)) : 0;
+                        const activeVariant = s.variants && s.variants[0];
+
                         return (
-                            <div key={s.id} onClick={() => setSelectedService(s)} 
+                            <div key={s.id} onClick={() => handleServiceSelect(s)} 
                                 className={`group relative bg-white rounded-[2rem] p-4 cursor-pointer transition-all duration-300 ease-out border-2 ${
                                     selectedService?.id===s.id 
                                     ? "border-blue-600 shadow-2xl shadow-blue-100 scale-[1.01] z-10" 
                                     : "border-transparent hover:border-zinc-200 hover:shadow-lg"
                                 }`}
                             >
-                                {/* RICH BADGE */}
                                 {s.badge && <span className="absolute top-6 left-6 z-20 bg-gradient-to-r from-blue-600 to-cyan-500 text-white text-[10px] font-bold px-3 py-1.5 rounded-full uppercase tracking-wider shadow-lg">{s.badge}</span>}
                                 
                                 <div className="flex flex-col sm:flex-row gap-5">
-                                    {/* RICH IMAGE (Large) */}
                                     <div className="w-full sm:w-40 h-40 rounded-2xl bg-gray-100 shrink-0 overflow-hidden relative">
                                         <img src={s.booking_image_url || s.image_url || FALLBACK_IMG} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" onError={(e)=>(e.target as HTMLImageElement).src=FALLBACK_IMG} />
                                     </div>
                                     <div className="flex-1 flex flex-col justify-center py-1">
-                                        <div className="flex justify-between items-start mb-2">
-                                            <h3 className="font-black text-xl md:text-2xl leading-none">{s.title}</h3>
-<div className="text-right">
-    {/* 1. Dynamic New Price (Based on duration state) */}
-    <span className="block text-xl md:text-2xl font-black text-blue-600">
-        ₹{duration === "30" ? (s.price_30 || s.price) : s.price}
-    </span>
-    
-    {/* 2. Dynamic Old Price (Conditional Gate) */}
-    {(() => {
-        const oldPrice = duration === "30" ? s.previous_price_30 : s.previous_price;
-        // Only render if oldPrice exists, is greater than 0, AND is higher than current price
-        if (oldPrice && oldPrice > 0) {
-            return (
-                <span className="text-xs text-slate-400 line-through font-medium">
-                    ₹{oldPrice}
-                </span>
-            );
-        }
-        return null;
-    })()}
-</div>
-                                        </div>
-                                        <p className="text-slate-500 text-xs md:text-sm leading-relaxed mb-3 line-clamp-2">{s.description}</p>
-                                        
-                                        {/* BENEFITS RESTORED */}
-                                        {s.benefits && (
-                                            <div className="flex flex-wrap gap-2 mt-auto">
-                                                {s.benefits.slice(0, 3).map((b: string, i: number) => (
-                                                    <span key={i} className="text-[10px] font-bold uppercase bg-slate-50 text-slate-600 px-2 py-1 rounded border border-slate-100">✓ {b}</span>
-                                                ))}
+                                            <div className="flex justify-between items-start mb-2">
+                                                <h3 className="font-black text-xl md:text-2xl leading-none">{s.title}</h3>
+                                                <div className="text-right">
+                                                    <span className="block text-xl md:text-2xl font-black text-blue-600">
+                                                        ₹{minPrice}
+                                                    </span>
+                                                    {activeVariant?.old_price && activeVariant.old_price > activeVariant.price && (
+                                                        <span className="text-xs text-slate-400 line-through font-medium">₹{activeVariant.old_price}</span>
+                                                    )}
+                                                </div>
                                             </div>
-                                        )}
+                                            <p className="text-slate-500 text-xs md:text-sm leading-relaxed mb-3 line-clamp-2">{s.description}</p>
+                                            
+                                            {s.variants && s.variants.length > 1 && (
+                                                <div className="flex flex-wrap gap-2 mt-auto">
+                                                    <span className="text-[9px] font-bold uppercase bg-blue-50 text-blue-600 px-2 py-1 rounded border border-blue-100">{s.variants.length} Options Available</span>
+                                                </div>
+                                            )}
                                     </div>
                                 </div>
                             </div>
@@ -314,72 +322,63 @@ const prev = duration === "30" ? s.previous_price_30 : s.previous_price;
             </div>
         </div>
                 
-{/* --- RIGHT: BILLING & FORM (OPTIMIZED) --- */}
+        {/* --- RIGHT: BILLING & FORM (UPDATED FOR DYNAMIC PRICING) --- */}
         <div className="lg:col-span-5">
             <div className="bg-white p-6 md:p-8 rounded-[2.5rem] shadow-xl border border-zinc-100 lg:sticky lg:top-24">
                 
-                {/* 1. PREMIUM FISCAL SUMMARY (TRANSFORMED) */}
+                {/* 1. DYNAMIC SUMMARY CARD */}
                 <div className="mb-8 p-6 bg-slate-900 rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden group">
                     <div className="absolute -right-4 -top-4 w-24 h-24 bg-blue-600/20 rounded-full blur-3xl group-hover:bg-blue-600/40 transition-all"></div>
                     
                     <h2 className="font-black text-[10px] tracking-[0.3em] mb-6 text-slate-500 uppercase">Billing Summary</h2>
 
-                    {selectedService ? (
+                    {selectedService && selectedVariant ? (
                         <div className="space-y-5">
+                            {/* Selected Protocol */}
                             <div className="flex justify-between items-end border-b border-slate-800 pb-4">
                                 <div>
                                     <span className="block text-[9px] font-black text-slate-500 uppercase tracking-widest">Protocol</span>
                                     <span className="font-bold text-lg tracking-tighter leading-none">{selectedService.title}</span>
                                 </div>
-                                <div className="text-right">
-                                    <span className="block text-[9px] font-black text-slate-500 uppercase tracking-widest">Duration</span>
-                                    <span className="font-bold text-lg leading-none tracking-tighter">{duration} MIN</span>
+                            </div>
+
+                            {/* DYNAMIC VARIANT SELECTOR */}
+                            <div>
+                                <span className="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2">Select Duration / Plan</span>
+                                <div className="grid grid-cols-2 gap-2">
+                                    {selectedService.variants.map((v) => (
+                                        <button 
+                                            key={v.id}
+                                            onClick={() => setSelectedVariant(v)}
+                                            className={`p-3 rounded-xl border text-left transition-all ${
+                                                selectedVariant.id === v.id 
+                                                ? "bg-white text-black border-white" 
+                                                : "bg-slate-800 text-slate-300 border-slate-700 hover:border-slate-500"
+                                            }`}
+                                        >
+                                            <div className="text-xs font-black uppercase">{v.duration}</div>
+                                            <div className="text-[10px]">₹{v.price}</div>
+                                        </button>
+                                    ))}
                                 </div>
                             </div>
 
-                            <div className="space-y-3">
-                                {(() => {
-                                    const oldPrice = duration === "30" ? selectedService.previous_price_30 : selectedService.previous_price;
-                                    if (oldPrice && oldPrice > currentPrice) {
-                                        return (
-                                            <div className="flex justify-between items-center text-slate-400">
-                                                <span className="text-[10px] font-bold uppercase tracking-widest">Standard Rate</span>
-                                                <span className="text-sm line-through decoration-red-500/40">₹{oldPrice}</span>
-                                            </div>
-                                        );
-                                    }
-                                    return null;
-                                })()}
-
-                                <div className="flex justify-between items-center">
-                                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Net Session Rate</span>
-                                    <span className="text-lg font-black text-white">₹{currentPrice}</span>
-                                </div>
-
-                                {discountAmount > 0 && (
-                                    <div className="flex justify-between items-center py-2.5 px-4 bg-blue-500/10 border border-blue-500/20 rounded-2xl animate-fade-in-up">
-                                        <div className="flex items-center gap-2">
-                                            <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />
-                                            <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest">{appliedCoupon?.code} SAVINGS</span>
-                                        </div>
-                                        <span className="text-sm font-black text-blue-400">- ₹{discountAmount}</span>
-                                    </div>
-                                )}
-                            </div>
-
+                            {/* Totals */}
                             <div className="pt-5 border-t border-slate-800 mt-2">
                                 <div className="flex justify-between items-center">
                                     <div>
                                         <span className="block text-[9px] font-black text-blue-500 uppercase tracking-[0.3em]">Total Payable</span>
                                         <span className="text-4xl font-black tracking-tighter text-white">₹{finalTotal}</span>
+                                        {selectedVariant.old_price && selectedVariant.old_price > selectedVariant.price && (
+                                            <span className="ml-2 text-sm text-slate-500 line-through">₹{selectedVariant.old_price * formData.guests}</span>
+                                        )}
                                     </div>
-                                    <div className="text-right">
-                                        <span className="text-[9px] font-black text-green-500 uppercase block tracking-widest">Secure</span>
-                                        <div className="flex gap-1 justify-end mt-1">
-                                            <div className="w-1 h-1 bg-green-500 rounded-full animate-bounce"></div>
-                                            <div className="w-1 h-1 bg-green-500 rounded-full animate-bounce [animation-delay:0.2s]"></div>
+                                    {discountAmount > 0 && (
+                                        <div className="text-right">
+                                            <span className="text-[10px] font-black text-green-400 uppercase block tracking-widest">Coupon Applied</span>
+                                            <span className="text-sm font-bold text-white">- ₹{discountAmount}</span>
                                         </div>
-                                    </div>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -392,6 +391,7 @@ const prev = duration === "30" ? s.previous_price_30 : s.previous_price;
 
                 {/* 2. BOOKING FORM */}
                 <form onSubmit={handleBooking} className="space-y-4">
+                    {/* Date & Time */}
                     <div className="grid grid-cols-2 gap-3">
                         <div className="space-y-1">
                             <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Date</label>
@@ -406,6 +406,7 @@ const prev = duration === "30" ? s.previous_price_30 : s.previous_price;
                         </div>
                     </div>
 
+                    {/* Promo Code */}
                     <div className="space-y-1">
                         <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Promo Code</label>
                         <div className="flex gap-2 h-12">
@@ -414,6 +415,7 @@ const prev = duration === "30" ? s.previous_price_30 : s.previous_price;
                         </div>
                     </div>
 
+                    {/* User Details */}
                     <div className="space-y-3 pt-2">
                         <input className="w-full h-12 px-4 bg-zinc-50 rounded-xl font-bold outline-none text-sm focus:bg-white focus:ring-2 focus:ring-blue-100 transition-all" placeholder="FULL NAME" required value={formData.name} onChange={e=>setFormData({...formData, name:e.target.value})} />
                         <div className="grid grid-cols-2 gap-3">
@@ -422,6 +424,7 @@ const prev = duration === "30" ? s.previous_price_30 : s.previous_price;
                         </div>
                     </div>
 
+                    {/* Payment */}
                     <div className="pt-4 border-t border-dashed border-zinc-200">
                         <div className="flex bg-slate-100 p-1 rounded-xl mb-4">
                             <button type="button" onClick={()=>setPaymentMethod("qr")} className={`flex-1 py-3 rounded-lg text-xs font-bold uppercase transition-all ${paymentMethod==="qr"?"bg-white shadow-md text-blue-600":"text-slate-400"}`}>UPI / QR</button>
@@ -437,7 +440,7 @@ const prev = duration === "30" ? s.previous_price_30 : s.previous_price;
                         )}
                     </div>
 
-{/* ... ensure this is inside the bottom of your form ... */}
+                    {/* Floating Submit (Mobile) / Static (Desktop) */}
                     <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/90 backdrop-blur-md border-t border-zinc-200 md:static md:bg-transparent md:border-0 md:p-0 z-50">
                         <button 
                             type="submit"
