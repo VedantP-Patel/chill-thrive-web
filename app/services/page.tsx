@@ -48,6 +48,10 @@ export default function ServicesPage() {
                         src={s.image_url || FALLBACK_IMG} 
                         alt={s.title} 
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" 
+                        onError={(e) => {
+                            // SMART FIX: If image fails (404/403), swap to Fallback instantly
+                            (e.target as HTMLImageElement).src = FALLBACK_IMG;
+                        }}
                     />
                     {s.type === 'combo' && (
                         <div className="absolute top-4 left-4 bg-black text-white text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider shadow-lg">

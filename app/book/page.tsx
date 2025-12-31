@@ -1,181 +1,465 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
-// REMOVED: export const revalidate = 0; (This was causing the crash)
+const FALLBACK_IMG = "https://images.unsplash.com/photo-1600334089648-b0d9d3028eb2?q=80&w=1000";
 
-export default function BookPage() {
+// --- 1. CORE COMPONENT ---
+function BookingContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const preSelectedId = searchParams.get('serviceId');
+
+  // --- STATE ---
   const [services, setServices] = useState<any[]>([]);
-  const [selectedService, setSelectedService] = useState<any | null>(null);
-  const [formData, setFormData] = useState({ name: "", email: "", phone: "", date: "", time: "10:00", guests: 1 });
-  const [loading, setLoading] = useState(false);
+  const [adminSettings, setAdminSettings] = useState<any>({});
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterType, setFilterType] = useState<"all" | "single" | "package">("all");
   
-  // DISCOUNT STATE
-  const [promoCode, setPromoCode] = useState("");
-  const [discount, setDiscount] = useState<{ type: string, value: number, code: string } | null>(null);
-  const [couponMessage, setCouponMessage] = useState("");
+  // Selection
+  const [selectedService, setSelectedService] = useState<any | null>(null);
+  const [duration, setDuration] = useState<"60" | "30">("60");
+  const [paymentMethod, setPaymentMethod] = useState<"qr" | "cash">("qr");
+  
+  // Form
+  const [formData, setFormData] = useState({ 
+    name: "", email: "", phone: "", date: "", time: "",
+    guests: 1, utr: "", promoCode: ""
+  });
 
-  // 1. FETCH SERVICES
+  // Logic
+  const [appliedCoupon, setAppliedCoupon] = useState<{code: string, value: number, type: string} | null>(null);
+  const [discountAmount, setDiscountAmount] = useState(0);
+  const [availableSlots, setAvailableSlots] = useState<string[]>([]);
+  const [isDayClosed, setIsDayClosed] = useState(false);
+  const [loadingSlots, setLoadingSlots] = useState(false);
+  const [slotStatus, setSlotStatus] = useState("Select Date First");
+  const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<{ [key: string]: string }>({});
+  const [success, setSuccess] = useState(false);
+
+  // --- FETCH & AUTO-SELECT ---
   useEffect(() => {
-    const fetchServices = async () => {
-      const { data } = await supabase.from("services").select("*").eq("is_active", true).order("price");
-      if (data) setServices(data);
+    const fetchData = async () => {
+      // Services
+      const { data: s } = await supabase.from("services").select("*").eq("is_active", true).order("price");
+      if (s) {
+          setServices(s);
+          if (preSelectedId) {
+              const found = s.find((item: any) => item.id === Number(preSelectedId));
+              if (found) setSelectedService(found);
+              else if (!selectedService && s.length > 0) setSelectedService(s[0]);
+          } else {
+              if (!selectedService && s.length > 0) setSelectedService(s[0]);
+          }
+      }
+      // Settings
+      const { data: set } = await supabase.from("settings").select("*");
+      if (set) {
+        const map: any = {};
+        set.forEach((item: any) => { map[item.key] = item.value; });
+        setAdminSettings(map);
+      }
     };
-    fetchServices();
-  }, []);
+    fetchData();
+  }, [preSelectedId]);
 
-  // 2. HANDLE COUPON
-  const applyCoupon = async () => {
-    if(!promoCode) return;
-    setCouponMessage("Verifying...");
-    
-    const { data, error } = await supabase
-      .from("coupons")
-      .select("*")
-      .eq("code", promoCode.toUpperCase())
-      .eq("is_active", true)
-      .single();
+  // --- FILTERING ---
+  const filteredServices = services.filter(s => {
+      const term = searchTerm.toLowerCase().trim();
+      const matchesSearch = 
+        !term || 
+        s.title.toLowerCase().includes(term) || 
+        s.description?.toLowerCase().includes(term) ||
+        s.badge?.toLowerCase().includes(term) ||
+        (s.type === 'combo' && 'combo'.includes(term));
 
-    if (error || !data) {
-      setDiscount(null);
-      setCouponMessage("❌ Invalid or Expired Code");
-    } else {
-      setDiscount({ type: data.discount_type, value: data.discount_value, code: data.code });
-      setCouponMessage(`✅ Code Applied: ${data.code}`);
-    }
+      const matchesType = filterType === "all" ? true : s.type === filterType;
+      return matchesSearch && matchesType;
+  });
+
+  // --- COUPON ---
+  const handleApplyCoupon = async () => {
+    if(!formData.promoCode) return;
+    const { data: coupon } = await supabase.from("coupons").select("*").eq("code", formData.promoCode.toUpperCase()).eq("is_active", true).single();
+    if (coupon) { setAppliedCoupon(coupon); alert(`✅ ${coupon.code} Applied!`); } 
+    else { setAppliedCoupon(null); alert("❌ Invalid Code"); }
   };
 
-  // 3. CALCULATE TOTAL
-  const basePrice = selectedService ? selectedService.price * formData.guests : 0;
-  const discountAmount = discount 
-    ? (discount.type === 'percent' ? (basePrice * discount.value / 100) : discount.value) 
-    : 0;
-  const finalTotal = Math.max(0, basePrice - discountAmount);
+  // --- SCHEDULE ---
+  useEffect(() => {
+    const fetchAvailability = async () => {
+      setAvailableSlots([]); setIsDayClosed(false); setSlotStatus("Checking..."); 
+      setFormData(prev => ({ ...prev, time: "" })); 
 
+      if (!formData.date || !selectedService) { setSlotStatus("Select Date"); return; }
+      
+      setLoadingSlots(true);
+      try {
+          const dateObj = new Date(formData.date);
+          const dayType = (dateObj.getDay()===0||dateObj.getDay()===6)?"weekend":"weekday";
+          const todayStr = new Date().toLocaleDateString('en-CA');
+
+          const { data: schedules } = await supabase.from("schedules").select("*");
+          if (!schedules) return;
+
+          let activeRule = schedules.find(s => s.type === 'custom' && s.date === formData.date && s.service_id === selectedService.id);
+          if (!activeRule) activeRule = schedules.find(s => s.type === 'custom' && s.date === formData.date && s.service_id === null);
+          if (!activeRule) activeRule = schedules.find(s => s.type === dayType && s.service_id === selectedService.id);
+          if (!activeRule) activeRule = schedules.find(s => s.type === dayType && s.service_id === null);
+
+          if (!activeRule || activeRule.is_closed) { 
+              setIsDayClosed(true); setSlotStatus("⛔ Closed Today"); setLoadingSlots(false); return; 
+          }
+
+          let rawSlots = activeRule.slots || [];
+          if (formData.date === todayStr) {
+              const now = new Date();
+              const currMins = now.getHours()*60 + now.getMinutes();
+              rawSlots = rawSlots.filter((slot: string) => {
+                  const [t, m] = slot.split(" "); let [h, mn] = t.split(":").map(Number);
+                  if (m==="PM" && h<12) h+=12; if (m==="AM" && h===12) h=0;
+                  return (h*60+mn) > currMins;
+              });
+          }
+
+          const { data: bookings } = await supabase.from("bookings").select("time").eq("booking_date", formData.date).eq("service_id", selectedService.id).neq("status", "cancelled");
+          if (bookings) {
+              const counts: any = {}; bookings.forEach((b: any) => counts[b.time]=(counts[b.time]||0)+1);
+              rawSlots = rawSlots.filter((s: string) => (counts[s]||0) < selectedService.capacity);
+          }
+
+          setAvailableSlots(rawSlots); 
+          setSlotStatus(rawSlots.length>0 ? "" : "Fully Booked");
+      } catch (err) { console.error(err); }
+      setLoadingSlots(false);
+    };
+    fetchAvailability();
+  }, [formData.date, selectedService]);
+
+  // --- PRICE ---
+  const currentPrice = selectedService ? (duration === "30" ? (selectedService.price_30 || selectedService.price) : selectedService.price) : 0;
+  
+  useEffect(() => {
+    if (!selectedService) return;
+    const base = currentPrice * formData.guests;
+    let d = 0;
+    if (appliedCoupon) {
+        d = appliedCoupon.type==='percent' ? Math.round((base*appliedCoupon.discount_value)/100) : appliedCoupon.discount_value;
+    }
+    setDiscountAmount(d);
+  }, [selectedService, duration, formData.guests, appliedCoupon, currentPrice]);
+
+  const finalTotal = (currentPrice * formData.guests) - discountAmount;
+
+  // --- SUBMIT ---
   const handleBooking = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedService) return alert("Select a service");
-    setLoading(true);
+    const newErrors: any = {};
+    if (!selectedService) newErrors.service = "Select Service";
+    if (!formData.time) newErrors.time = "Select Time";
+    if (formData.phone.length !== 10) newErrors.phone = "Invalid Phone";
+    if (paymentMethod === 'qr' && formData.utr.length < 4) newErrors.utr = "Enter UTR";
+    
+    setErrors(newErrors); 
+    if(Object.keys(newErrors).length>0) return;
 
+    setLoading(true);
     const { error } = await supabase.from("bookings").insert([{
-      user_name: formData.name,
-      user_email: formData.email,
+      service_id: selectedService.id, 
+      service_type: selectedService.title, 
+      duration: `${duration} Min`,
+      user_name: formData.name, 
+      user_email: formData.email, 
       user_phone: formData.phone,
-      booking_date: formData.date,
-      time: formData.time,
-      service_type: selectedService.title,
-      duration: "60 Min",
-      status: "payment_review", // Waiting for payment
-      payment_method: "QR Code", 
-      transaction_id: "PENDING", // In a real app, you'd collect UTR here or integrate Gateway
-      total_amount: finalTotal // Store the discounted price
+      booking_date: formData.date, 
+      time: formData.time, 
+      guests: formData.guests,
+      status: paymentMethod==='qr'?'payment_review':'pending',
+      payment_method: paymentMethod==='qr'?'QR Code':'Pay at Venue',
+      transaction_id: formData.utr||"N/A", 
+      total_amount: finalTotal
     }]);
 
-    if (error) alert("Booking Failed");
-    else {
-      alert(`Booking Request Sent! Pay ₹${finalTotal} via QR Code to confirm.`);
-      router.push("/");
-    }
+    if(error) alert(error.message); 
+    else { setSuccess(true); window.scrollTo({top:0, behavior:'smooth'}); }
     setLoading(false);
   };
 
+  if (success) return (
+    <div className="min-h-screen flex items-center justify-center bg-zinc-50 p-6">
+        <div className="bg-white p-8 md:p-12 rounded-[2rem] shadow-xl text-center max-w-md w-full border border-green-100 animate-fade-in-up">
+            <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto text-4xl mb-6 shadow-sm">✓</div>
+            <h1 className="text-3xl font-black mb-2">REQUEST SENT!</h1>
+            <p className="text-slate-500 mb-8 leading-relaxed">We are verifying your slot.</p>
+            <button onClick={() => window.location.reload()} className="w-full py-4 bg-black text-white font-bold rounded-xl uppercase tracking-widest hover:bg-zinc-800 transition-all">Book Another</button>
+        </div>
+    </div>
+  );
+
   return (
-    <main className="min-h-screen bg-zinc-50 pt-24 pb-20 px-6 font-sans text-slate-900">
-      <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-12">
+    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans pt-20 pb-32 md:pb-20 px-4 md:px-8">
+      <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8 h-full">
         
-        {/* LEFT: SERVICE SELECTION */}
-        <div className="lg:col-span-2 space-y-6">
-          <h1 className="text-4xl font-black tracking-tighter mb-8">SELECT PROTOCOL</h1>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {services.map((s) => (
-              <div 
-                key={s.id} 
-                onClick={() => setSelectedService(s)}
-                className={`p-6 rounded-2xl border-2 cursor-pointer transition-all relative overflow-hidden group ${selectedService?.id === s.id ? "border-blue-600 bg-white shadow-xl scale-[1.02]" : "border-zinc-200 bg-white hover:border-zinc-300"}`}
-              >
-                {/* COMBO BADGE */}
-                {s.type === 'combo' && (
-                    <div className="absolute top-0 right-0 bg-black text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl z-10">
-                        🧩 COMBO DEAL
+        {/* --- LEFT: SEARCH & LIST (RICH UI RESTORED) --- */}
+        <div className="lg:col-span-7 flex flex-col h-full lg:h-[calc(100vh-8rem)]">
+            
+            {/* HEADER */}
+            <div className="mb-6 space-y-4 shrink-0">
+                <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+                    <div>
+                        <h1 className="text-4xl md:text-5xl font-black tracking-tighter mb-1">PROTOCOL</h1>
+                        <p className="text-slate-500 text-sm">Select your recovery session.</p>
                     </div>
+                    <div className="bg-white p-1 rounded-xl shadow-sm border inline-flex self-start md:self-auto">
+                        <button onClick={()=>setDuration("60")} className={`px-4 py-2 rounded-lg text-xs font-bold uppercase transition-all ${duration==="60"?"bg-black text-white shadow":"text-slate-400 hover:text-black"}`}>60 Mins</button>
+                        <button onClick={()=>setDuration("30")} className={`px-4 py-2 rounded-lg text-xs font-bold uppercase transition-all ${duration==="30"?"bg-black text-white shadow":"text-slate-400 hover:text-black"}`}>30 Mins</button>
+                    </div>
+                </div>
+
+                {/* SEARCH */}
+                <div className="flex flex-col sm:flex-row gap-3 h-auto sm:h-12">
+                    <div className="relative flex-1 h-12 sm:h-full">
+                        <input 
+                            type="text" 
+                            placeholder="Search..." 
+                            className="w-full h-full pl-10 pr-4 bg-white border border-zinc-200 rounded-xl font-bold text-sm outline-none focus:border-black focus:ring-1 focus:ring-black transition-all"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">🔍</span>
+                    </div>
+                    <div className="flex gap-1 h-12 sm:h-full bg-white p-1 rounded-xl border border-zinc-200 shrink-0">
+    {["all", "single", "package"].map(t => (
+        <button 
+            key={t} 
+            onClick={()=>setFilterType(t as any)} 
+            className={`px-4 h-full rounded-lg text-[10px] font-bold uppercase transition-all ${filterType===t?"bg-black text-white":"text-slate-500 hover:bg-slate-100"}`}
+        >
+            {t === 'package' ? 'Combos' : t}
+        </button>
+    ))}
+</div>
+                </div>
+            </div>
+
+            {/* LIST (With Large Images & Badges) */}
+            <div className="flex-1 overflow-y-auto p-4 -m-4 space-y-4 custom-scrollbar">
+                {filteredServices.length === 0 ? (
+                    <div className="text-center py-20 text-slate-400 border-2 border-dashed rounded-3xl">No services found.</div>
+                ) : (
+                    filteredServices.map((s) => {
+// Inside filteredServices.map
+const price = duration === "30" ? (s.price_30 || s.price) : s.price;
+const prev = duration === "30" ? s.previous_price_30 : s.previous_price;
+                        
+                        return (
+                            <div key={s.id} onClick={() => setSelectedService(s)} 
+                                className={`group relative bg-white rounded-[2rem] p-4 cursor-pointer transition-all duration-300 ease-out border-2 ${
+                                    selectedService?.id===s.id 
+                                    ? "border-blue-600 shadow-2xl shadow-blue-100 scale-[1.01] z-10" 
+                                    : "border-transparent hover:border-zinc-200 hover:shadow-lg"
+                                }`}
+                            >
+                                {/* RICH BADGE */}
+                                {s.badge && <span className="absolute top-6 left-6 z-20 bg-gradient-to-r from-blue-600 to-cyan-500 text-white text-[10px] font-bold px-3 py-1.5 rounded-full uppercase tracking-wider shadow-lg">{s.badge}</span>}
+                                
+                                <div className="flex flex-col sm:flex-row gap-5">
+                                    {/* RICH IMAGE (Large) */}
+                                    <div className="w-full sm:w-40 h-40 rounded-2xl bg-gray-100 shrink-0 overflow-hidden relative">
+                                        <img src={s.booking_image_url || s.image_url || FALLBACK_IMG} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" onError={(e)=>(e.target as HTMLImageElement).src=FALLBACK_IMG} />
+                                    </div>
+                                    <div className="flex-1 flex flex-col justify-center py-1">
+                                        <div className="flex justify-between items-start mb-2">
+                                            <h3 className="font-black text-xl md:text-2xl leading-none">{s.title}</h3>
+<div className="text-right">
+    {/* 1. Dynamic New Price (Based on duration state) */}
+    <span className="block text-xl md:text-2xl font-black text-blue-600">
+        ₹{duration === "30" ? (s.price_30 || s.price) : s.price}
+    </span>
+    
+    {/* 2. Dynamic Old Price (Conditional Gate) */}
+    {(() => {
+        const oldPrice = duration === "30" ? s.previous_price_30 : s.previous_price;
+        // Only render if oldPrice exists, is greater than 0, AND is higher than current price
+        if (oldPrice && oldPrice > 0) {
+            return (
+                <span className="text-xs text-slate-400 line-through font-medium">
+                    ₹{oldPrice}
+                </span>
+            );
+        }
+        return null;
+    })()}
+</div>
+                                        </div>
+                                        <p className="text-slate-500 text-xs md:text-sm leading-relaxed mb-3 line-clamp-2">{s.description}</p>
+                                        
+                                        {/* BENEFITS RESTORED */}
+                                        {s.benefits && (
+                                            <div className="flex flex-wrap gap-2 mt-auto">
+                                                {s.benefits.slice(0, 3).map((b: string, i: number) => (
+                                                    <span key={i} className="text-[10px] font-bold uppercase bg-slate-50 text-slate-600 px-2 py-1 rounded border border-slate-100">✓ {b}</span>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })
                 )}
+            </div>
+        </div>
                 
-                <div className="relative h-40 w-full mb-4 rounded-xl overflow-hidden bg-gray-100">
-                    <img 
-                        src={s.booking_image_url || s.image_url || "https://placehold.co/600x400"} 
-                        alt={s.title} 
-                        className="w-full h-full object-cover" 
-                    />
+{/* --- RIGHT: BILLING & FORM (OPTIMIZED) --- */}
+        <div className="lg:col-span-5">
+            <div className="bg-white p-6 md:p-8 rounded-[2.5rem] shadow-xl border border-zinc-100 lg:sticky lg:top-24">
+                
+                {/* 1. PREMIUM FISCAL SUMMARY (TRANSFORMED) */}
+                <div className="mb-8 p-6 bg-slate-900 rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden group">
+                    <div className="absolute -right-4 -top-4 w-24 h-24 bg-blue-600/20 rounded-full blur-3xl group-hover:bg-blue-600/40 transition-all"></div>
+                    
+                    <h2 className="font-black text-[10px] tracking-[0.3em] mb-6 text-slate-500 uppercase">Billing Summary</h2>
+
+                    {selectedService ? (
+                        <div className="space-y-5">
+                            <div className="flex justify-between items-end border-b border-slate-800 pb-4">
+                                <div>
+                                    <span className="block text-[9px] font-black text-slate-500 uppercase tracking-widest">Protocol</span>
+                                    <span className="font-bold text-lg tracking-tighter leading-none">{selectedService.title}</span>
+                                </div>
+                                <div className="text-right">
+                                    <span className="block text-[9px] font-black text-slate-500 uppercase tracking-widest">Duration</span>
+                                    <span className="font-bold text-lg leading-none tracking-tighter">{duration} MIN</span>
+                                </div>
+                            </div>
+
+                            <div className="space-y-3">
+                                {(() => {
+                                    const oldPrice = duration === "30" ? selectedService.previous_price_30 : selectedService.previous_price;
+                                    if (oldPrice && oldPrice > currentPrice) {
+                                        return (
+                                            <div className="flex justify-between items-center text-slate-400">
+                                                <span className="text-[10px] font-bold uppercase tracking-widest">Standard Rate</span>
+                                                <span className="text-sm line-through decoration-red-500/40">₹{oldPrice}</span>
+                                            </div>
+                                        );
+                                    }
+                                    return null;
+                                })()}
+
+                                <div className="flex justify-between items-center">
+                                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Net Session Rate</span>
+                                    <span className="text-lg font-black text-white">₹{currentPrice}</span>
+                                </div>
+
+                                {discountAmount > 0 && (
+                                    <div className="flex justify-between items-center py-2.5 px-4 bg-blue-500/10 border border-blue-500/20 rounded-2xl animate-fade-in-up">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />
+                                            <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest">{appliedCoupon?.code} SAVINGS</span>
+                                        </div>
+                                        <span className="text-sm font-black text-blue-400">- ₹{discountAmount}</span>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="pt-5 border-t border-slate-800 mt-2">
+                                <div className="flex justify-between items-center">
+                                    <div>
+                                        <span className="block text-[9px] font-black text-blue-500 uppercase tracking-[0.3em]">Total Payable</span>
+                                        <span className="text-4xl font-black tracking-tighter text-white">₹{finalTotal}</span>
+                                    </div>
+                                    <div className="text-right">
+                                        <span className="text-[9px] font-black text-green-500 uppercase block tracking-widest">Secure</span>
+                                        <div className="flex gap-1 justify-end mt-1">
+                                            <div className="w-1 h-1 bg-green-500 rounded-full animate-bounce"></div>
+                                            <div className="w-1 h-1 bg-green-500 rounded-full animate-bounce [animation-delay:0.2s]"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="py-12 text-center border-2 border-dashed border-slate-800 rounded-3xl">
+                            <p className="text-[10px] font-black text-slate-600 uppercase tracking-[0.4em]">Initialize Selection</p>
+                        </div>
+                    )}
                 </div>
-                
-                <div className="flex justify-between items-start mb-2">
-                    <h3 className="font-bold text-lg">{s.title}</h3>
-                    <div className="text-right">
-                        <span className="block font-bold text-blue-600">₹{s.price}</span>
-                        {s.previous_price && <span className="text-xs text-gray-400 line-through">₹{s.previous_price}</span>}
+
+                {/* 2. BOOKING FORM */}
+                <form onSubmit={handleBooking} className="space-y-4">
+                    <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Date</label>
+                            <input type="date" min={new Date().toISOString().split("T")[0]} className="w-full h-12 px-3 bg-zinc-50 rounded-xl font-bold outline-none text-sm focus:bg-white focus:ring-2 focus:ring-blue-100 transition-all cursor-pointer" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} />
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Time</label>
+                            <select className={`w-full h-12 px-3 rounded-xl font-bold outline-none text-sm bg-zinc-50 appearance-none focus:bg-white focus:ring-2 focus:ring-blue-100 transition-all ${errors.time?"ring-2 ring-red-100":""}`} value={formData.time} onChange={(e)=>setFormData({...formData, time: e.target.value})} disabled={!formData.date||loadingSlots||isDayClosed||availableSlots.length===0}>
+                                {loadingSlots ? <option>Checking...</option> : availableSlots.length > 0 ? <option value="">Select Slot</option> : <option>{slotStatus}</option>}
+                                {availableSlots.map(t => <option key={t} value={t}>{t}</option>)}
+                            </select>
+                        </div>
                     </div>
-                </div>
-                <p className="text-sm text-gray-500 leading-relaxed">{s.description}</p>
-                {/* Capacity Indicator */}
-                <div className="mt-4 flex items-center gap-2 text-xs font-bold text-zinc-400 uppercase tracking-wider">
-                    <span>👥 Up to {s.capacity} People</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
 
-        {/* RIGHT: CHECKOUT FORM */}
-        <div className="bg-white p-8 rounded-[2rem] shadow-xl border border-zinc-100 h-fit sticky top-24">
-          <h2 className="font-bold text-xl mb-6">Your Session</h2>
-          
-          <form onSubmit={handleBooking} className="space-y-4">
-            <div><label className="text-xs font-bold text-gray-400 uppercase">Date</label><input type="date" required className="w-full p-3 border rounded-lg font-bold" onChange={e => setFormData({...formData, date: e.target.value})} /></div>
-            <div><label className="text-xs font-bold text-gray-400 uppercase">Time</label><input type="time" required className="w-full p-3 border rounded-lg font-bold" value={formData.time} onChange={e => setFormData({...formData, time: e.target.value})} /></div>
-            
-            <div className="grid grid-cols-2 gap-4">
-                <div><label className="text-xs font-bold text-gray-400 uppercase">Name</label><input type="text" placeholder="Your Name" required className="w-full p-3 border rounded-lg" onChange={e => setFormData({...formData, name: e.target.value})} /></div>
-                <div><label className="text-xs font-bold text-gray-400 uppercase">Guests</label><input type="number" min="1" max={selectedService?.capacity || 5} className="w-full p-3 border rounded-lg" value={formData.guests} onChange={e => setFormData({...formData, guests: Number(e.target.value)})} /></div>
-            </div>
-            
-            <input type="email" placeholder="Email" required className="w-full p-3 border rounded-lg" onChange={e => setFormData({...formData, email: e.target.value})} />
-            <input type="tel" placeholder="Phone" required className="w-full p-3 border rounded-lg" onChange={e => setFormData({...formData, phone: e.target.value})} />
+                    <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Promo Code</label>
+                        <div className="flex gap-2 h-12">
+                            <input className="flex-1 h-full px-4 bg-zinc-50 rounded-xl font-bold outline-none text-sm uppercase focus:bg-white focus:ring-2 focus:ring-blue-100 transition-all placeholder:normal-case" placeholder="Enter Code" value={formData.promoCode} onChange={e=>setFormData({...formData, promoCode:e.target.value})} />
+                            <button type="button" onClick={handleApplyCoupon} className="px-6 bg-black text-white rounded-xl font-bold text-xs shadow-md active:scale-95 transition-all">APPLY</button>
+                        </div>
+                    </div>
 
-            {/* PROMO CODE SECTION */}
-            <div className="pt-4 border-t border-dashed">
-                <label className="text-xs font-bold text-gray-400 uppercase">Promo Code</label>
-                <div className="flex gap-2">
-                    <input 
-                        type="text" 
-                        className="w-full p-3 border rounded-lg uppercase font-mono text-sm" 
-                        placeholder="SUMMER20"
-                        value={promoCode}
-                        onChange={e => setPromoCode(e.target.value)}
-                    />
-                    <button type="button" onClick={applyCoupon} className="px-4 bg-black text-white rounded-lg text-xs font-bold uppercase hover:bg-zinc-800">Apply</button>
-                </div>
-                {couponMessage && <p className={`text-xs mt-2 font-bold ${couponMessage.includes("✅") ? "text-green-600" : "text-red-500"}`}>{couponMessage}</p>}
-            </div>
+                    <div className="space-y-3 pt-2">
+                        <input className="w-full h-12 px-4 bg-zinc-50 rounded-xl font-bold outline-none text-sm focus:bg-white focus:ring-2 focus:ring-blue-100 transition-all" placeholder="FULL NAME" required value={formData.name} onChange={e=>setFormData({...formData, name:e.target.value})} />
+                        <div className="grid grid-cols-2 gap-3">
+                            <input className="w-full h-12 px-4 bg-zinc-50 rounded-xl font-bold outline-none text-sm focus:bg-white focus:ring-2 focus:ring-blue-100 transition-all" type="tel" maxLength={10} placeholder="PHONE" required value={formData.phone} onChange={e=>setFormData({...formData, phone:e.target.value.replace(/\D/g,"")})} />
+                            <input className="w-full h-12 px-4 bg-zinc-50 rounded-xl font-bold outline-none text-sm focus:bg-white focus:ring-2 focus:ring-blue-100 transition-all" type="email" placeholder="EMAIL" required value={formData.email} onChange={e=>setFormData({...formData, email:e.target.value})} />
+                        </div>
+                    </div>
 
-            {/* TOTALS */}
-            <div className="pt-6 mt-6 border-t space-y-2">
-                <div className="flex justify-between text-sm text-gray-500"><span>Subtotal</span><span>₹{basePrice}</span></div>
-                {discount && <div className="flex justify-between text-sm text-green-600 font-bold"><span>Discount ({discount.code})</span><span>- ₹{discountAmount.toFixed(0)}</span></div>}
-                <div className="flex justify-between text-2xl font-black mt-2"><span>Total</span><span>₹{finalTotal.toFixed(0)}</span></div>
-            </div>
+                    <div className="pt-4 border-t border-dashed border-zinc-200">
+                        <div className="flex bg-slate-100 p-1 rounded-xl mb-4">
+                            <button type="button" onClick={()=>setPaymentMethod("qr")} className={`flex-1 py-3 rounded-lg text-xs font-bold uppercase transition-all ${paymentMethod==="qr"?"bg-white shadow-md text-blue-600":"text-slate-400"}`}>UPI / QR</button>
+                            <button type="button" onClick={()=>setPaymentMethod("cash")} className={`flex-1 py-3 rounded-lg text-xs font-bold uppercase transition-all ${paymentMethod==="cash"?"bg-white shadow-md text-green-600":"text-slate-400"}`}>Pay at Venue</button>
+                        </div>
+                        {paymentMethod === 'qr' && (
+                            <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100 text-center">
+                                <div className="bg-white p-2 rounded-lg inline-block shadow-sm mb-2">
+                                    <img src={adminSettings.upi_qr || FALLBACK_IMG} className="w-24 h-24 object-contain" alt="QR" />
+                                </div>
+                                <input className={`w-full p-3 text-center text-sm font-bold bg-white border rounded-lg outline-none tracking-widest ${errors.utr?"border-red-500":"border-blue-200"}`} placeholder="ENTER UTR / REF ID" value={formData.utr} onChange={e=>setFormData({...formData, utr:e.target.value})} />
+                            </div>
+                        )}
+                    </div>
 
-            <button disabled={loading} className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl shadow-lg shadow-blue-200 transition-all text-lg uppercase tracking-widest mt-4">
-                {loading ? "Processing..." : "Confirm & Pay"}
-            </button>
-            <p className="text-xs text-center text-gray-400 mt-4">Payment via QR Code on next step.</p>
-          </form>
-        </div>
+{/* ... ensure this is inside the bottom of your form ... */}
+                    <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/90 backdrop-blur-md border-t border-zinc-200 md:static md:bg-transparent md:border-0 md:p-0 z-50">
+                        <button 
+                            type="submit"
+                            disabled={loading} 
+                            className="w-full py-4 bg-black text-white font-black rounded-2xl uppercase shadow-xl hover:bg-zinc-800 disabled:opacity-50 text-sm md:text-base transition-all active:scale-[0.98]"
+                        >
+                            {loading ? "Processing..." : `Confirm • ₹${finalTotal}`}
+                        </button>
+                    </div>
+                </form> 
+            </div> 
+        </div> 
+      </div> 
+    </div>
+  );
+}
 
-      </div>
-    </main>
+// 2. THE WRAPPER (Suspense Boundary)
+export default function BookPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-zinc-50 font-black uppercase tracking-widest text-[10px]">Buffer Loading...</div>}>
+      <BookingContent />
+    </Suspense>
   );
 }

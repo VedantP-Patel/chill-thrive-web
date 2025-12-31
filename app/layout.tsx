@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
-import "./globals.css"; // <--- THIS LINE IS CRITICAL
-import Navbar from "@/components/Navbar";
+import "./globals.css";
+import ClientLayout from "@/components/ClientLayout"; // Import the wrapper
 
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "Chill Thrive | Recovery & Wellness",
-  description: "Elite contrast therapy and recovery protocols.",
+  description: "Advanced recovery protocols for high performers.",
 };
 
 export default function RootLayout({
@@ -18,8 +18,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <Navbar />
-        {children}
+        {/* Pass children to ClientLayout. It handles the Navbar/Footer visibility. */}
+        <ClientLayout>
+            {children}
+        </ClientLayout>
       </body>
     </html>
   );

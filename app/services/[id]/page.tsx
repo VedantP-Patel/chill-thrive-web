@@ -1,176 +1,118 @@
+"use client";
+
+import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import Image from "next/image";
-import { notFound } from "next/navigation";
 
-// FORCE DYNAMIC (Important for ensuring price updates show immediately)
-export const revalidate = 0;
-export const dynamic = "force-dynamic";
+const FALLBACK_IMG = "https://images.unsplash.com/photo-1600334089648-b0d9d3028eb2?q=80&w=1000";
 
-interface PageProps {
-  params: Promise<{ id: string }>;
-}
+export default function ServiceDetailPage() {
+  const { id } = useParams(); // Get ID from URL
+  const [service, setService] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
-// FALLBACK IMAGE
-const FALLBACK_IMG = "https://images.unsplash.com/photo-1544367563-12123d896889?q=80&w=1000";
+  useEffect(() => {
+    const fetchService = async () => {
+      if (!id) return;
+      const { data, error } = await supabase.from("services").select("*").eq("id", id).single();
+      if (data) setService(data);
+      setLoading(false);
+    };
+    fetchService();
+  }, [id]);
 
-export default async function ServiceDetailPage(props: PageProps) {
-  // Unwrap params for Next.js 15+
-  const params = await props.params;
-
-  // 1. Fetch Service
-  const { data: service, error } = await supabase
-    .from("services")
-    .select("*")
-    .eq("id", params.id)
-    .single();
-
-  if (error || !service) {
-    notFound();
-  }
-
-  // 2. Fetch Testimonials (Optional: showing real social proof)
-  const { data: testimonials } = await supabase
-    .from("testimonials")
-    .select("*")
-    .order("created_at", { ascending: false })
-    .limit(3);
-
-  // Defaults
-  const benefits = service.benefits || ["Deep Recovery", "Circulation Boost", "Mental Focus"];
-  const heroImage = service.detail_image_url || service.image_url || FALLBACK_IMG;
-  const price30 = service.price_30 || Math.round(service.price * 0.6);
+  if (loading) return <div className="min-h-screen flex items-center justify-center bg-white"><div className="animate-spin text-4xl">↻</div></div>;
+  if (!service) return <div className="min-h-screen flex items-center justify-center bg-white text-slate-400">Service not found.</div>;
 
   return (
-    <main className="min-h-screen bg-white text-slate-900 font-sans pt-24 pb-20">
+    <main className="min-h-screen bg-white text-slate-900 font-sans pb-20">
       
-      {/* --- HERO HEADER --- */}
-      <section className="max-w-7xl mx-auto px-6 mb-12">
-        <Link href="/services" className="text-xs font-bold uppercase text-slate-400 hover:text-black mb-4 inline-block transition-colors">
-          ← Back to Menu
-        </Link>
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-            <div>
-                {service.type === 'combo' && (
-                    <span className="inline-block px-3 py-1 mb-3 rounded-full bg-black text-white text-[10px] font-bold uppercase tracking-widest">
-                        🧩 Combo Package
-                    </span>
-                )}
-                <h1 className="text-5xl md:text-7xl font-black tracking-tighter uppercase leading-none">
-                    {service.title}
-                </h1>
+      {/* HERO HEADER */}
+      <div className="relative h-[60vh] w-full overflow-hidden bg-slate-900">
+        <div className="absolute inset-0 bg-black/40 z-10"></div>
+        <img 
+            src={service.detail_image_url || service.image_url || FALLBACK_IMG} 
+            className="w-full h-full object-cover opacity-90"
+            alt={service.title}
+            onError={(e) => (e.target as HTMLImageElement).src = FALLBACK_IMG}
+        />
+        <div className="absolute bottom-0 left-0 w-full p-6 md:p-12 z-20 bg-gradient-to-t from-black/90 to-transparent pt-32">
+            <div className="max-w-7xl mx-auto">
+                <span className="inline-block px-3 py-1 bg-cyan-400 text-black text-xs font-bold uppercase tracking-widest rounded mb-4">
+                    {service.type === 'combo' ? 'Combo Package' : 'Recovery Protocol'}
+                </span>
+                <h1 className="text-5xl md:text-7xl font-black text-white tracking-tighter uppercase mb-4">{service.title}</h1>
+                <p className="text-xl text-slate-200 max-w-2xl font-light">{service.description}</p>
             </div>
-            <p className="text-xl text-slate-500 max-w-lg leading-relaxed">
-                {service.description}
-            </p>
         </div>
-      </section>
+      </div>
 
-      {/* --- CONTENT GRID --- */}
-      <section className="max-w-7xl mx-auto px-6 grid grid-cols-1 lg:grid-cols-12 gap-12">
+      {/* CONTENT GRID */}
+      <div className="max-w-7xl mx-auto px-6 py-16 grid grid-cols-1 lg:grid-cols-12 gap-12">
         
-        {/* LEFT COLUMN: VISUALS & DETAILS (Span 8) */}
+        {/* LEFT: DETAILS (Span 8) */}
         <div className="lg:col-span-8 space-y-12">
             
-            {/* Hero Image */}
-            <div className="relative h-[50vh] w-full rounded-[2.5rem] overflow-hidden bg-gray-100 shadow-xl border border-zinc-100">
-                <Image 
-                    src={heroImage} 
-                    alt={service.title} 
-                    fill 
-                    className="object-cover"
-                    priority
-                    unoptimized
-                />
-            </div>
+            {/* THE PROTOCOL */}
+            <section>
+                <h2 className="text-xs font-bold text-blue-600 uppercase tracking-widest mb-4">The Protocol</h2>
+                <div className="prose prose-lg text-slate-600 leading-relaxed whitespace-pre-line">
+                    {service.long_description || "No detailed protocol available yet."}
+                </div>
+            </section>
 
-            {/* Protocol Description */}
-            <div className="prose prose-lg prose-slate max-w-none">
-                <h3 className="text-sm font-bold uppercase text-slate-400 tracking-widest mb-4">The Protocol</h3>
-                <p className="text-slate-700 leading-relaxed whitespace-pre-line text-lg">
-                    {service.long_description || service.description || "Experience the ultimate recovery session designed to reset your nervous system and reduce inflammation."}
-                </p>
-            </div>
-
-            {/* Benefits Grid */}
-            <div className="bg-zinc-50 rounded-3xl p-8 border border-zinc-100">
-                <h3 className="text-sm font-bold uppercase text-slate-400 tracking-widest mb-6">Physiological Benefits</h3>
+            {/* BENEFITS */}
+            <section>
+                <h2 className="text-xs font-bold text-blue-600 uppercase tracking-widest mb-6">Key Benefits</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {benefits.map((b: string, i: number) => (
-                        <div key={i} className="flex items-start gap-3">
-                            <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-xs mt-0.5">✓</div>
-                            <span className="font-medium text-slate-700">{b}</span>
-                        </div>
-                    ))}
+                    {service.benefits && service.benefits.length > 0 ? (
+                        service.benefits.map((benefit: string, index: number) => (
+                            <div key={index} className="flex items-center gap-4 p-4 bg-slate-50 rounded-xl border border-slate-100">
+                                <span className="w-8 h-8 flex items-center justify-center bg-white rounded-full text-green-500 font-bold border shadow-sm">✓</span>
+                                <span className="font-bold text-slate-800 text-sm uppercase">{benefit}</span>
+                            </div>
+                        ))
+                    ) : <p className="text-slate-400 italic">Benefits not listed.</p>}
                 </div>
-            </div>
+            </section>
 
-            {/* Member Stories (Mini) */}
-            {testimonials && testimonials.length > 0 && (
-                <div>
-                    <h3 className="text-sm font-bold uppercase text-slate-400 tracking-widest mb-6">Member Experiences</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                         {testimonials.slice(0, 2).map((t: any) => (
-                             <div key={t.id} className="bg-white border border-slate-100 p-6 rounded-2xl shadow-sm">
-                                 <p className="text-slate-600 italic text-sm mb-4">"{t.message}"</p>
-                                 <p className="text-xs font-bold text-slate-900">— {t.name}</p>
-                             </div>
-                         ))}
-                    </div>
-                </div>
-            )}
         </div>
 
-        {/* RIGHT COLUMN: STICKY BOOKING CARD (Span 4) */}
-        <div className="lg:col-span-4 relative">
-            <div className="sticky top-24 bg-white p-8 rounded-[2rem] shadow-[0_0_40px_rgba(0,0,0,0.08)] border border-slate-100 space-y-8">
-                
-                {/* Price Header */}
-                <div>
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Session Pricing</p>
-                    <div className="flex items-baseline gap-2">
-                        <span className="text-5xl font-black text-blue-600">₹{service.price}</span>
-                        <span className="text-lg font-bold text-slate-400">/ 60m</span>
+        {/* RIGHT: STICKY BOOKING CARD (Span 4) */}
+        <div className="lg:col-span-4">
+            <div className="sticky top-24 bg-white p-8 rounded-[2.5rem] shadow-2xl border border-slate-100">
+                <div className="text-center mb-8">
+                    <p className="text-slate-400 text-xs font-bold uppercase mb-2">Session Price</p>
+                    <div className="flex justify-center items-baseline gap-2">
+                        <span className="text-5xl font-black text-slate-900">₹{service.price}</span>
+                        {service.previous_price && <span className="text-xl text-slate-400 line-through">₹{service.previous_price}</span>}
                     </div>
-                    {service.previous_price && (
-                        <p className="text-sm text-slate-400 line-through mt-1">Was ₹{service.previous_price}</p>
-                    )}
+                    <p className="text-xs text-slate-400 mt-2 font-medium">Per Person • 60 Mins</p>
                 </div>
 
-                {/* 30 Min Option */}
-                <div className="flex justify-between items-center py-4 border-t border-slate-100">
-                    <span className="font-bold text-slate-700">30 Min Session</span>
-                    <span className="font-bold text-slate-900">₹{price30}</span>
+                <div className="space-y-3">
+                    <Link 
+                        href={`/book?serviceId=${service.id}`} 
+                        className="block w-full py-5 bg-black text-white font-bold text-center rounded-xl uppercase tracking-widest hover:bg-cyan-400 hover:text-black transition-all shadow-lg hover:scale-105"
+                    >
+                        Book This Session
+                    </Link>
+                    <Link href="/services" className="block w-full py-4 bg-white text-slate-500 font-bold text-center rounded-xl uppercase tracking-widest border hover:bg-slate-50 transition-all text-xs">
+                        View Other Services
+                    </Link>
                 </div>
 
-                {/* Stats */}
-                <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-slate-50 p-4 rounded-xl text-center">
-                        <span className="block text-2xl">👥</span>
-                        <span className="text-[10px] font-bold uppercase text-slate-400 block mt-1">Up to {service.capacity}</span>
-                    </div>
-                    <div className="bg-slate-50 p-4 rounded-xl text-center">
-                        <span className="block text-2xl">🌡️</span>
-                        <span className="text-[10px] font-bold uppercase text-slate-400 block mt-1">Temp Control</span>
+                <div className="mt-8 pt-8 border-t border-slate-100 text-center">
+                    <p className="text-xs text-slate-400 uppercase font-bold tracking-widest">Included</p>
+                    <div className="flex justify-center gap-4 mt-4 text-2xl text-slate-300">
+                        <span>🚿</span><span>lz</span><span>☕</span>
                     </div>
                 </div>
-
-                {/* CTA */}
-                <Link 
-                    href="/book" 
-                    className="block w-full py-5 bg-black text-white text-center rounded-xl font-bold text-lg uppercase tracking-widest hover:bg-zinc-800 transition-all hover:scale-[1.02] shadow-xl"
-                >
-                    Book Now
-                </Link>
-                
-                <p className="text-xs text-center text-slate-400 leading-relaxed">
-                    *Instant confirmation. Cancellations allowed up to 24h prior.
-                </p>
             </div>
         </div>
 
-      </section>
-
+      </div>
     </main>
   );
 }

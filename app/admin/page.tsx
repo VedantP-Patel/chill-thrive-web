@@ -2,508 +2,1368 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 
-// --- TYPES ---
+// --- 1. TYPE DEFINITIONS ---
+type Booking = { 
+  id: number; user_name: string; user_phone: string; user_email: string;
+  service_type: string; booking_date: string; time: string; 
+  status: string; payment_method: string; transaction_id?: string; 
+  total_amount: number; duration: string; created_at: string; 
+  coupon_code?: string; discount_amount?: number;
+};
+
+type ContactMessage = { 
+  id: number; name: string; phone: string; message: string; created_at: string; 
+};
+
+// 🔒 NEW SUB-TYPE
+type ServiceVariant = {
+  id: string;          // Unique ID for the row
+  duration: string;    // e.g. "90 Mins"
+  price: number;       // e.g. 2500
+  old_price: number;   // e.g. 3000
+  active: boolean;     // Enable/Disable specific duration
+};
+
+// 🔒 UPDATED SERVICE TYPE
 type Service = { 
   id: number; 
   title: string; 
-  type: string; // 'single' | 'combo'
-  price: number; 
-  previous_price: number | null; 
-  price_30: number; 
-  previous_price_30: number | null; 
   description: string; 
-  long_description: string; 
-  benefits: string[]; 
-  capacity: number; 
   is_active: boolean; 
+  type: "single" | "combo"; 
+  capacity: number; 
+  
+  // The Dynamic List
+  variants: ServiceVariant[]; 
+
+  // Visuals
   image_url: string; 
-  booking_image_url: string; 
-  detail_image_url: string; 
-  badge: string; 
+  detail_image_url?: string; 
+  booking_image_url?: string;
 };
-type Schedule = { id: number; type: string; date: string | null; slots: string[]; is_closed: boolean; service_id: number | null; };
-type Testimonial = { id: number; name: string; role: string; message: string; video_url?: string; rating: number; is_active: boolean; };
-type Booking = { id: number; booking_date: string; time: string; user_name: string; user_email: string; user_phone: string; service_type: string; status: string; payment_method: string; transaction_id: string; duration: string; created_at: string; };
-type GalleryImage = { id: number; image_url: string; category?: string; };
-type ContentBlock = { id: number; slug: string; title: string; content: string; category: string; };
-type Event = { id: number; title: string; description: string; event_date: string; cover_image_url: string; };
-type Message = { id: number; name: string; phone: string; message: string; created_at: string; };
-type FounderProfile = { id: number; name: string; role: string; story: string; mission: string; value_1_title: string; value_1_desc: string; value_2_title: string; value_2_desc: string; quote: string; image_url: string; };
-type Coupon = { id: number; code: string; discount_type: "percent" | "fixed"; discount_value: number; is_active: boolean; };
+
+type Testimonial = { 
+  id: number; name: string; role: string; message: string; rating: number; is_active: boolean; 
+};
+
+type Coupon = { 
+  id: number; code: string; discount_value: number; type: "percent" | "flat"; is_active: boolean; 
+};
+
+type Founder = { 
+  id: number; name: string; role: string; bio: string; image_url: string; 
+};
 
 export default function AdminPage() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<"bookings" | "inbox" | "services" | "discounts" | "events" | "founder" | "gallery" | "schedule" | "content" | "testimonials" | "settings">("bookings");
-  const [loading, setLoading] = useState(false);
-  const [notification, setNotification] = useState("");
-  const [searchTerm, setSearchTerm] = useState("");
-  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // --- DATA STATES ---
-  const [services, setServices] = useState<Service[]>([]);
-  const [bookings, setBookings] = useState<Booking[]>([]);
-  const [schedules, setSchedules] = useState<Schedule[]>([]);
-  const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
-  const [galleryImages, setGalleryImages] = useState<GalleryImage[]>([]);
-  const [contentBlocks, setContentBlocks] = useState<ContentBlock[]>([]);
-  const [events, setEvents] = useState<Event[]>([]);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [founderProfile, setFounderProfile] = useState<FounderProfile | null>(null);
-  const [coupons, setCoupons] = useState<Coupon[]>([]);
-
-  // --- EDIT STATES ---
-  const [selectedService, setSelectedService] = useState<Service | null>(null);
-  const [formService, setFormService] = useState<Partial<Service>>({});
-  const [benefitsInput, setBenefitsInput] = useState(""); 
-  const [homeFile, setHomeFile] = useState<File | null>(null); const [homePreview, setHomePreview] = useState<string | null>(null);
-  const [bookingFile, setBookingFile] = useState<File | null>(null); const [bookingPreview, setBookingPreview] = useState<string | null>(null);
-  const [detailFile, setDetailFile] = useState<File | null>(null); const [detailPreview, setDetailPreview] = useState<string | null>(null);
-  const [selectedContent, setSelectedContent] = useState<ContentBlock | null>(null);
-
-  // --- FOUNDER EDIT STATE ---
-  const [founderFile, setFounderFile] = useState<File | null>(null);
-  const [founderPreview, setFounderPreview] = useState<string | null>(null);
-
-  // --- DISCOUNT STATE ---
-  const [newCoupon, setNewCoupon] = useState<Partial<Coupon>>({ code: "", discount_type: "percent", discount_value: 0, is_active: true });
-
-  // --- SCHEDULE STATE ---
-  const [scheduleScope, setScheduleScope] = useState<number | "global">("global");
-  const [activeDayType, setActiveDayType] = useState<"weekday" | "weekend">("weekday");
-  const [currentSlots, setCurrentSlots] = useState<string[]>([]);
-  const [genStart, setGenStart] = useState("09:00");
-  const [genEnd, setGenEnd] = useState("21:00");
-  const [genInterval, setGenInterval] = useState(60);
-  const [newDate, setNewDate] = useState("");
-  const [isClosed, setIsClosed] = useState(false);
-
-  // --- NEW ITEM STATES ---
-  const [newEvent, setNewEvent] = useState<Partial<Event>>({ title: "", description: "", event_date: "", cover_image_url: "" });
-  const [eventFile, setEventFile] = useState<File | null>(null);
-  const [newTestimonial, setNewTestimonial] = useState<Partial<Testimonial>>({ name: "", role: "", message: "", video_url: "", rating: 5, is_active: true });
+  // =========================================
+  //           1. UNIFIED STATE KERNEL
+  // =========================================
   
-  // --- SETTINGS STATE ---
-  const [galleryCategory, setGalleryCategory] = useState("general");
-  const [qrUrl, setQrUrl] = useState("");
-  const [qrFile, setQrFile] = useState<File | null>(null); const [qrPreview, setQrPreview] = useState<string | null>(null);
-  const [contactInfo, setContactInfo] = useState({ email: "", phone: "", address: "" });
-  const [galleryFile, setGalleryFile] = useState<File | null>(null);
+  // System
+  const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [activeTab, setActiveTab] = useState('bookings');
+  const [searchTerm, setSearchTerm] = useState("");
 
-  // --- FETCH ---
-  const fetchData = async () => {
-    const { data: s } = await supabase.from("services").select("*").order("id"); if (s) setServices(s);
-    const { data: b } = await supabase.from("bookings").select("*").order("created_at", { ascending: false }); if (b) setBookings(b);
-    const { data: sch } = await supabase.from("schedules").select("*").order("date"); if (sch) setSchedules(sch);
-    const { data: t } = await supabase.from("testimonials").select("*").order("created_at", { ascending: false }); if (t) setTestimonials(t);
-    const { data: g } = await supabase.from("gallery_images").select("*").order("created_at", { ascending: false }); if (g) setGalleryImages(g);
-    const { data: c } = await supabase.from("content_blocks").select("*").order("id"); if (c) setContentBlocks(c);
-    const { data: e } = await supabase.from("events").select("*").order("event_date", { ascending: false }); if (e) setEvents(e);
-    const { data: m } = await supabase.from("contact_messages").select("*").order("created_at", { ascending: false }); if (m) setMessages(m);
-    const { data: f } = await supabase.from("founder_profile").select("*").single(); if (f) { setFounderProfile(f); setFounderPreview(f.image_url); }
-    const { data: cp } = await supabase.from("coupons").select("*").order("id"); if (cp) setCoupons(cp as Coupon[]);
-    const { data: set } = await supabase.from("settings").select("*");
-    if (set) { const map: any = {}; set.forEach(row => map[row.key] = row.value); setQrUrl(map["upi_qr"] || ""); setContactInfo({ email: map["contact_email"] || "", phone: map["contact_phone"] || "", address: map["contact_address"] || "" }); }
+  // Data Banks
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [messages, setMessages] = useState<ContactMessage[]>([]);
+  const [services, setServices] = useState<Service[]>([]);
+  const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
+  const [coupons, setCoupons] = useState<Coupon[]>([]);
+  const [founderProfile, setFounderProfile] = useState<Founder | null>(null);
+  const [settings, setSettings] = useState<any>({});
+  
+  // Filters
+  const [bookingFilter, setBookingFilter] = useState<'pending' | 'upcoming' | 'history'>('pending');
+
+  // Service Editor
+  const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
+  const [editingService, setEditingService] = useState<any | null>(null);
+  const [serviceFiles, setServiceFiles] = useState<{ home: File | null, detail: File | null, book: File | null }>({ home: null, detail: null, book: null });
+
+  // Extras
+  const [uploadingQr, setUploadingQr] = useState(false);
+  const [isCouponModalOpen, setIsCouponModalOpen] = useState(false);
+  const [newCoupon, setNewCoupon] = useState({ code: '', discount_value: 0, type: 'percent', is_active: true });
+  const [newTestimonial, setNewTestimonial] = useState({ name: "", role: "", message: "", rating: 5, is_active: true });
+  const [founderFile, setFounderFile] = useState<File | null>(null);
+  
+  // Reschedule Logic
+  const [rescheduleTarget, setRescheduleTarget] = useState<any | null>(null);
+  const [rescheduleDate, setRescheduleDate] = useState("");
+  const [rescheduleTime, setRescheduleTime] = useState("");
+  const [smartSlots, setSmartSlots] = useState<string[]>([]);
+  const [calculatingSlots, setCalculatingSlots] = useState(false);
+
+
+  // =========================================
+  //           2. LOGIC ENGINE
+  // =========================================
+
+  // --- SYNC PIPELINE (FETCH ALL DATA) ---
+  const handleRefresh = async () => {
+    setLoading(true); setIsRefreshing(true);
+    console.log("[PROTOCOL 12B]: Syncing RAM with Remote Disk...");
+
+    try {
+      const [svc, bks, msgs, stg, tst, cpn, fnd] = await Promise.all([
+        supabase.from('services').select('*').order('id', { ascending: true }),
+        supabase.from('bookings').select('*, coupon_code, transaction_id, discount_amount').order('created_at', { ascending: false }),
+        supabase.from('contact_messages').select('*').order('created_at', { ascending: false }),
+        supabase.from('settings').select('*'),
+        supabase.from('testimonials').select('*').order('id'),
+        supabase.from('coupons').select('*').order('id'),
+        supabase.from('founder_profile').select('*').single()
+      ]);
+
+      if (svc.data) setServices(svc.data);
+      if (bks.data) setBookings(bks.data);
+      if (msgs.data) setMessages(msgs.data);
+      if (tst.data) setTestimonials(tst.data);
+      if (cpn.data) setCoupons(cpn.data);
+      if (fnd.data) setFounderProfile(fnd.data);
+
+      if (stg.data) {
+        const map: any = {};
+        stg.data.forEach((item: any) => map[item.key] = item.value);
+        setSettings(map);
+      }
+      
+      console.log("✅ Sync Complete.");
+    } catch (err: any) {
+      console.error("SYNC ERROR:", err.message);
+    } finally {
+      setLoading(false); setIsRefreshing(false);
+    }
   };
-  useEffect(() => { fetchData(); }, []);
-  const notify = (msg: string) => { setNotification(msg); setTimeout(() => setNotification(""), 3000); };
-  const handleRefresh = async () => { setIsRefreshing(true); await fetchData(); setTimeout(() => setIsRefreshing(false), 500); };
 
-  // --- HANDLERS: BOOKINGS ---
-  const handleExportBookings = () => {
-    const headers = ["Date", "Time", "Name", "Phone", "Email", "Service", "Status", "Payment", "UTR"];
-    const rows = bookings.map(b => [b.booking_date, b.time, b.user_name, b.user_phone, b.user_email, b.service_type, b.status, b.payment_method, b.transaction_id].join(","));
-    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows].join("\n");
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `bookings-${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
+  useEffect(() => { handleRefresh(); }, []);
+
+
+  // --- HELPER: FILE UPLOAD ---
+  const uploadFile = async (file: File, bucket: string = "assets") => {
+    const name = `upload-${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, "_")}`;
+    const { error } = await supabase.storage.from(bucket).upload(name, file);
+    if (error) throw error;
+    const { data } = supabase.storage.from(bucket).getPublicUrl(name);
+    return data.publicUrl;
   };
-  const handleCancelBooking = async (id: number) => { if(confirm("Cancel this booking?")) await supabase.from("bookings").update({ status: 'cancelled' }).eq('id', id); fetchData(); };
-  const handleVerifyPayment = async (id: number) => { if(confirm("Confirm?")) await supabase.from("bookings").update({ status: "confirmed" }).eq("id", id); fetchData(); };
 
-  // --- HANDLERS: COUPONS ---
-  const handleAddCoupon = async (e: React.FormEvent) => {
+  // --- HELPER: NOTIFICATIONS ---
+  const sendNotification = async (type: string, booking: any, extra: any = {}) => {
+      const isEmail = settings.notify_email_enabled !== 'false';
+      const isSms = settings.notify_sms_enabled !== 'false';
+      const email = booking.user_email?.trim();
+      const phone = booking.user_phone?.trim();
+      const name = booking.user_name || "Client";
+
+      let subject = "", body = "";
+      
+      if (type === 'confirmation') {
+          subject = `CONFIRMED: ${booking.service_type}`;
+          body = `Hi ${name}, your booking is confirmed for ${booking.booking_date} at ${booking.time}.`;
+      } else if (type === 'cancellation') {
+          subject = `CANCELLED: ${booking.service_type}`;
+          body = `Hi ${name}, your booking on ${booking.booking_date} has been cancelled.`;
+      } else if (type === 'reschedule') {
+          subject = `UPDATED: Booking Moved`;
+          body = `Hi ${name}, your booking is moved to ${extra.newDate} at ${extra.newTime}.`;
+      }
+
+      if (isEmail && email) window.open(`mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank');
+      if (isSms && phone) window.open(`sms:${phone}?body=${encodeURIComponent(body)}`, '_blank');
+  };
+
+
+  // --- SERVICE LOGIC (TOGGLE) ---
+  const toggleServiceActive = async (service: any) => {
+    const newStatus = !service.is_active;
+    setServices(services.map(s => s.id === service.id ? { ...s, is_active: newStatus } : s)); // Optimistic
+    await supabase.from('services').update({ is_active: newStatus }).eq('id', service.id);
+  };
+
+  // --- SERVICE LOGIC (SAVE) ---
+  const handleSaveService = async (e: React.FormEvent) => {
     e.preventDefault();
-    const { error } = await supabase.from("coupons").insert([newCoupon]);
-    if(error) notify("Error"); else { notify("Coupon Created"); setNewCoupon({ code: "", discount_type: "percent", discount_value: 0, is_active: true }); fetchData(); }
+    if (!editingService) return;
+    setLoading(true);
+
+    try {
+      let finalData = { 
+        ...editingService,
+        price: Number(editingService.price),
+        previous_price: Number(editingService.previous_price || 0),
+        price_30: Number(editingService.price_30 || 0),
+        previous_price_30: Number(editingService.previous_price_30 || 0),
+        capacity: Number(editingService.capacity || 1)
+      };
+
+      // Image Uploads
+      const fileKeys = ['home', 'detail', 'book'];
+      const dbKeys = ['image_url', 'detail_image_url', 'booking_image_url'];
+
+      for (let i = 0; i < fileKeys.length; i++) {
+        const fileKey = fileKeys[i] as keyof typeof serviceFiles;
+        const dbKey = dbKeys[i];
+        const file = serviceFiles[fileKey];
+
+        if (file) {
+          const fileName = `svc-${Date.now()}-${i}.${file.name.split('.').pop()}`;
+          const filePath = `services/${fileName}`; 
+          const { error: uploadError } = await supabase.storage.from('assets').upload(filePath, file);
+          if (uploadError) throw uploadError;
+          const { data: urlData } = supabase.storage.from('assets').getPublicUrl(filePath);
+          finalData[dbKey] = urlData.publicUrl;
+        }
+      }
+
+      if (finalData.id === 0) {
+        delete finalData.id; 
+        const { error } = await supabase.from('services').insert([finalData]);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('services').update(finalData).eq('id', finalData.id);
+        if (error) throw error;
+      }
+
+      setIsServiceModalOpen(false);
+      setEditingService(null);
+      setServiceFiles({ home: null, detail: null, book: null });
+      handleRefresh(); 
+      alert("Service Saved!");
+
+    } catch (error: any) {
+      alert("Error: " + error.message);
+    } finally {
+      setLoading(false);
+    }
   };
-  const handleDeleteCoupon = async (id: number) => { if(confirm("Del?")) await supabase.from("coupons").delete().eq("id", id); fetchData(); };
 
-  // --- HANDLERS: SERVICES ---
-  const handleSelectService = (s: Service) => { setSelectedService(s); setFormService({ ...s }); setBenefitsInput(s.benefits ? s.benefits.join("\n") : ""); setHomePreview(s.image_url); setHomeFile(null); setBookingPreview(s.booking_image_url); setBookingFile(null); setDetailPreview(s.detail_image_url); setDetailFile(null); };
-  const handleAddNewService = async () => { const { data, error } = await supabase.from("services").insert([{ title: "New Service", description: "Edit me", price: 1000, is_active: false, capacity: 1, type: "single" }]).select().single(); if (error) notify("Error"); else { notify("Created!"); await fetchData(); if(data) handleSelectService(data); } };
-  const handleDeleteService = async () => { if(!selectedService || !confirm("Delete?")) return; await supabase.from("services").delete().eq("id", selectedService.id); notify("Deleted"); setSelectedService(null); fetchData(); };
-  const handleToggleActive = async () => { if(!selectedService) return; const ns = !formService.is_active; setFormService({...formService, is_active: ns}); await supabase.from("services").update({ is_active: ns }).eq("id", selectedService.id); notify(ns ? "Public" : "Hidden"); fetchData(); };
-  const handleSaveService = async (e: React.FormEvent) => { e.preventDefault(); if (!selectedService) return; setLoading(true); try { const u = async (f: File | null, existing: string | undefined) => { if (!f) return existing; const n = `s-${Date.now()}-${f.name}`; await supabase.storage.from("service-images").upload(n, f); const { data } = supabase.storage.from("service-images").getPublicUrl(n); return data.publicUrl; }; const h = await u(homeFile, formService.image_url); const b = await u(bookingFile, formService.booking_image_url); const d = await u(detailFile, formService.detail_image_url); const ups = { ...formService, image_url: h, booking_image_url: b, detail_image_url: d, benefits: benefitsInput.split("\n").filter(x=>x.trim()), price: Number(formService.price), price_30: Number(formService.price_30), previous_price: Number(formService.previous_price), previous_price_30: Number(formService.previous_price_30), capacity: Number(formService.capacity) }; await supabase.from("services").update(ups).eq("id", selectedService.id); notify("Saved!"); fetchData(); router.refresh(); } catch (err: any) { notify(err.message); } finally { setLoading(false); } };
 
-  // --- HANDLERS: FOUNDER ---
+  // --- EXTRAS (QR, SETTINGS, ACTIONS) ---
+  const handleQrUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files?.length) return;
+    const file = e.target.files[0];
+    const filePath = `company_assets/upi-qr-${Date.now()}.${file.name.split('.').pop()}`;
+    setUploadingQr(true);
+    const { data } = await supabase.storage.from('assets').upload(filePath, file).then(() => supabase.storage.from('assets').getPublicUrl(filePath));
+    setSettings({ ...settings, upi_qr: data?.publicUrl });
+    setUploadingQr(false);
+  };
+
+  const handleSaveSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const updates = Object.keys(settings).map(key => ({ key, value: settings[key] }));
+    await supabase.from('settings').upsert(updates, { onConflict: 'key' });
+    alert("Configuration Saved");
+  };
+
+  // Booking Actions
+  const handleVerifyPayment = async (id: number) => {
+    if(!confirm("Confirm payment?")) return;
+    const { data } = await supabase.from('bookings').update({ status: 'confirmed' }).eq('id', id).select();
+    if(data) sendNotification('confirmation', data[0]);
+    handleRefresh();
+  };
+  const handleCancelBooking = async (id: number) => {
+    if(!confirm("Cancel booking?")) return;
+    const { data } = await supabase.from('bookings').update({ status: 'cancelled' }).eq('id', id).select();
+    if(data) sendNotification('cancellation', data[0]);
+    handleRefresh();
+  };
+  const handleMarkDone = async (id: number) => {
+    await supabase.from('bookings').update({ status: 'done' }).eq('id', id);
+    handleRefresh();
+  };
+  const handleDeleteMessage = async (id: number) => {
+    if(!confirm("Delete message?")) return;
+    await supabase.from('contact_messages').delete().eq('id', id);
+    handleRefresh();
+  };
+  
+  // Coupon Actions
+  const handleAddCoupon = async (e: React.FormEvent) => {
+     e.preventDefault();
+     await supabase.from('coupons').insert([{...newCoupon, is_active: true}]);
+     setIsCouponModalOpen(false);
+     handleRefresh();
+  };
+  const deleteCoupon = async (id: number) => {
+    if(confirm("Delete Coupon?")) await supabase.from("coupons").delete().eq("id", id);
+    handleRefresh();
+  };
+
+  // Testimonial Actions
+  const handleAddTestimonial = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await supabase.from("testimonials").insert([newTestimonial]);
+    setNewTestimonial({ name: "", role: "", message: "", rating: 5, is_active: true });
+    handleRefresh();
+  };
+  const deleteTestimonial = async (id: number) => {
+     if(confirm("Delete Review?")) await supabase.from("testimonials").delete().eq("id", id);
+     handleRefresh();
+  };
+  
+  // Founder Action
   const handleSaveFounder = async (e: React.FormEvent) => {
-    e.preventDefault(); if (!founderProfile) return; setLoading(true);
-    let imgUrl = founderProfile.image_url;
-    if (founderFile) { const n = `founder-${Date.now()}`; await supabase.storage.from("service-images").upload(n, founderFile); const { data } = supabase.storage.from("service-images").getPublicUrl(n); imgUrl = data.publicUrl; }
-    await supabase.from("founder_profile").update({ ...founderProfile, image_url: imgUrl }).eq("id", 1); notify("Updated!"); setLoading(false);
+    e.preventDefault();
+    if (!founderProfile) return;
+    let img = founderProfile.image_url;
+    if (founderFile) img = await uploadFile(founderFile) || img;
+    await supabase.from("founder_profile").update({ ...founderProfile, image_url: img }).eq("id", 1);
+    alert("Profile Updated");
   };
 
-  // --- HANDLERS: CONTENT, MESSAGES, TESTIMONIALS, EVENTS, SCHEDULE, SETTINGS ---
-  const handleAddContent = async () => { const { data, error } = await supabase.from("content_blocks").insert([{ slug: `section-${Date.now()}`, title: "New Section", content: "...", category: "awareness" }]).select().single(); if(error) notify("Error"); else { notify("Added!"); fetchData(); if(data) setSelectedContent(data); } };
-  const handleDeleteContent = async () => { if (!selectedContent || !confirm("Delete?")) return; await supabase.from("content_blocks").delete().eq("id", selectedContent.id); notify("Deleted"); setSelectedContent(null); fetchData(); };
-  const handleSaveContent = async (e: React.FormEvent) => { e.preventDefault(); if(!selectedContent) return; setLoading(true); await supabase.from("content_blocks").update({ slug: selectedContent.slug, title: selectedContent.title, content: selectedContent.content }).eq("id", selectedContent.id); notify("Saved!"); fetchData(); setLoading(false); };
-  const handleDeleteMessage = async (id: number) => { if(confirm("Archive this message?")) await supabase.from("contact_messages").delete().eq("id", id); notify("Deleted"); fetchData(); };
-  const handleAddTestimonial = async (e: React.FormEvent) => { e.preventDefault(); const { error } = await supabase.from("testimonials").insert([newTestimonial]); if (error) notify("Error"); else { notify("Added!"); setNewTestimonial({ name: "", role: "", message: "", video_url: "", rating: 5, is_active: true }); fetchData(); } };
-  const handleDeleteTestimonial = async (id: number) => { if(confirm("Del?")) await supabase.from("testimonials").delete().eq("id", id); fetchData(); };
-  const toggleTestimonialVisibility = async (t: Testimonial) => { await supabase.from("testimonials").update({ is_active: !t.is_active }).eq("id", t.id); fetchData(); };
-  const handleAddEvent = async (e: React.FormEvent) => { e.preventDefault(); setLoading(true); let coverUrl = newEvent.cover_image_url; if (eventFile) { const n = `event-${Date.now()}`; await supabase.storage.from("service-images").upload(n, eventFile); const { data } = supabase.storage.from("service-images").getPublicUrl(n); coverUrl = data.publicUrl; } const { error } = await supabase.from("events").insert([{ ...newEvent, cover_image_url: coverUrl }]); if (error) notify("Error"); else { notify("Event Added!"); setNewEvent({ title: "", description: "", event_date: "", cover_image_url: "" }); setEventFile(null); fetchData(); } setLoading(false); };
-  const handleDeleteEvent = async (id: number) => { if(confirm("Del?")) await supabase.from("events").delete().eq("id", id); fetchData(); };
-  const runGenerator = () => { const slots = []; let c = new Date(`2000-01-01T${genStart}`); const e = new Date(`2000-01-01T${genEnd}`); if (genInterval < 15) return; while (c < e) { slots.push(c.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })); c.setMinutes(c.getMinutes() + genInterval); } setCurrentSlots(slots); notify(`Generated ${slots.length}`); };
-  const saveCurrentSlots = async () => { const scopeId = scheduleScope === "global" ? null : scheduleScope; const existing = schedules.find(s => s.type === activeDayType && s.service_id === scopeId); if (existing) await supabase.from("schedules").update({ slots: currentSlots }).eq("id", existing.id); else await supabase.from("schedules").insert([{ type: activeDayType, slots: currentSlots, service_id: scopeId }]); notify("Saved!"); fetchData(); };
-  const removeSlot = (s: string) => setCurrentSlots(currentSlots.filter(sl => sl !== s));
-  const addSingleSlot = () => { const t = prompt("Time (01:30 PM):"); if (t) setCurrentSlots([...currentSlots, t].sort()); };
-  const handleAddException = async () => { if (!newDate) return; const scopeId = scheduleScope==='global'?null:scheduleScope; await supabase.from("schedules").insert([{ type: "custom", date: newDate, slots: isClosed ? [] : currentSlots, is_closed: isClosed, service_id: scopeId }]); notify("Added"); fetchData(); };
-  const handleDeleteRule = async (id: number) => { if(confirm("Del?")) await supabase.from("schedules").delete().eq("id", id); fetchData(); };
-  const handleUpdateQR = async () => { if (!qrFile) return; const n = `qr-${Date.now()}`; await supabase.storage.from("service-images").upload(n, qrFile); const { data } = supabase.storage.from("service-images").getPublicUrl(n); await supabase.from("settings").upsert({ key: "upi_qr", value: data.publicUrl }, { onConflict: "key" }); setQrUrl(data.publicUrl); notify("Updated"); };
-  const handleSaveContact = async (e: React.FormEvent) => { e.preventDefault(); await supabase.from("settings").upsert([{ key: "contact_email", value: contactInfo.email }, { key: "contact_phone", value: contactInfo.phone }, { key: "contact_address", value: contactInfo.address }], { onConflict: "key" }); notify("Saved"); };
-  const handleUploadGallery = async () => { if (!galleryFile) return; const n = `gal-${Date.now()}`; await supabase.storage.from("service-images").upload(n, galleryFile); const { data } = supabase.storage.from("service-images").getPublicUrl(n); await supabase.from("gallery_images").insert([{ image_url: data.publicUrl, category: galleryCategory }]); notify("Uploaded!"); fetchData(); };
-  const handleDeleteGallery = async (id: number) => { if(confirm("Del?")) await supabase.from("gallery_images").delete().eq("id", id); fetchData(); };
+  // Reschedule Logic
+  const openReschedule = (b: any) => { 
+      setRescheduleTarget(b); 
+      setRescheduleDate(b.booking_date); 
+      setRescheduleTime(b.time); 
+      calculateAvailability(b.booking_date, b);
+  };
+  
+  const calculateAvailability = async (date: string, booking: any) => {
+      setCalculatingSlots(true);
+      setSmartSlots([]);
+      // Stub for slot calculation logic - extend as needed
+      // For now, allow generic slots if no logic provided
+      setSmartSlots(["06:00 AM", "07:00 AM", "08:00 AM", "09:00 AM", "05:00 PM", "06:00 PM", "07:00 PM"]);
+      setCalculatingSlots(false);
+  };
 
-  const filteredBookings = bookings.filter(b => b.user_name.toLowerCase().includes(searchTerm.toLowerCase()) || b.user_phone.includes(searchTerm) || b.transaction_id?.toLowerCase().includes(searchTerm.toLowerCase()) || b.service_type.toLowerCase().includes(searchTerm.toLowerCase()));
+  const confirmReschedule = async () => {
+    if (!rescheduleTarget) return;
+    await supabase.from('bookings').update({ booking_date: rescheduleDate, time: rescheduleTime }).eq('id', rescheduleTarget.id);
+    sendNotification('reschedule', rescheduleTarget, { newDate: rescheduleDate, newTime: rescheduleTime });
+    setRescheduleTarget(null);
+    handleRefresh();
+  };
 
+  // Filter Logic
+  const filteredBookings = bookings.filter(b => {
+    const s = (b.status || 'pending').toLowerCase();
+    if (bookingFilter === 'pending') return ['pending', 'payment_review'].includes(s);
+    if (bookingFilter === 'upcoming') return ['confirmed', 'booked', 'active'].includes(s);
+    if (bookingFilter === 'history') return ['done', 'cancelled', 'rejected'].includes(s);
+    return true;
+  });
+
+  // --- DYNAMIC PRICING LOGIC ---
+  
+  // 1. Add a new empty row
+  const addVariant = () => {
+    const newVariant = {
+      id: Date.now().toString(), // Simple temp ID
+      duration: "",
+      price: 0,
+      old_price: 0,
+      active: true
+    };
+    setEditingService({
+      ...editingService,
+      variants: [...(editingService.variants || []), newVariant]
+    });
+  };
+
+  // 2. Remove a row
+  const removeVariant = (id: string) => {
+    setEditingService({
+      ...editingService,
+      variants: editingService.variants.filter((v: any) => v.id !== id)
+    });
+  };
+
+  // 3. Update a specific field in a row
+  const updateVariant = (id: string, field: string, value: any) => {
+    const updated = editingService.variants.map((v: any) => 
+      v.id === id ? { ...v, [field]: value } : v
+    );
+    setEditingService({ ...editingService, variants: updated });
+  };
+  // --- 6. RENDER UI ---
   return (
-    <div className="min-h-screen bg-zinc-50 text-slate-900 font-sans flex flex-col">
-      <header className="bg-white border-b sticky top-0 z-30 px-4 md:px-6 py-4 flex flex-col md:flex-row items-center justify-between shadow-sm gap-4">
-        <h1 className="font-bold text-lg">Admin</h1>
-        <div className="w-full md:w-auto overflow-x-auto pb-2 md:pb-0">
-          <div className="flex flex-nowrap gap-1 bg-zinc-100 p-1 rounded-lg min-w-max">
-            {["bookings", "inbox", "services", "discounts", "events", "founder", "gallery", "schedule", "content", "testimonials", "settings"].map(tab => (
-              <button key={tab} onClick={() => setActiveTab(tab as any)} className={`px-3 py-2 md:py-1.5 rounded-md text-xs font-bold uppercase tracking-wider transition-all whitespace-nowrap ${activeTab === tab ? "bg-black text-white shadow" : "text-gray-500 hover:text-black"}`}>{tab}</button>
-            ))}
-          </div>
+    <div className="flex h-screen bg-white font-sans text-slate-900">
+      
+      {/* SIDEBAR */}
+      <aside className="w-20 md:w-64 bg-slate-50 border-r border-slate-200 flex flex-col items-center md:items-start py-8 md:px-6 shrink-0 z-20">
+        <div className="mb-10 flex items-center gap-3">
+            <div className="w-10 h-10 bg-black rounded-xl"></div>
+            <span className="hidden md:block font-black text-xl tracking-tighter">ADMIN</span>
         </div>
-      </header>
-      {notification && <div className="fixed bottom-5 right-5 left-5 md:left-auto bg-black text-white px-6 py-3 rounded-lg shadow-xl z-50 text-center md:text-left text-sm font-bold">{notification}</div>}
+        <nav className="flex-1 space-y-2 w-full">
+            {[
+                { id: "bookings", label: "Bookings", icon: "📅" },
+                { id: "inbox", label: "Inbox", icon: "📥" },
+                { id: "services", label: "Services", icon: "⚡" },
+                { id: "founder", label: "Founder", icon: "👤" },
+                { id: "testimonials", label: "Reviews", icon: "⭐" },
+                { id: "coupons", label: "Coupons", icon: "🎟️" },
+                { id: "settings", label: "Settings", icon: "⚙️" },
+            ].map(item => (
+                <button 
+                    key={item.id} 
+                    onClick={() => setActiveTab(item.id)}
+                    className={`w-full flex items-center gap-4 px-3 py-3 rounded-xl transition-all ${activeTab === item.id ? "bg-white shadow-md text-black font-bold" : "text-slate-400 hover:bg-slate-100 hover:text-slate-600"}`}
+                >
+                    <span className="text-xl">{item.icon}</span>
+                    <span className="hidden md:block text-sm font-bold uppercase tracking-wide">{item.label}</span>
+                </button>
+            ))}
+        </nav>
+        <button onClick={() => router.push("/")} className="mt-auto flex items-center gap-2 text-slate-400 hover:text-black transition-colors font-bold text-xs uppercase tracking-widest">
+            <span>←</span> <span className="hidden md:inline">Exit</span>
+        </button>
+      </aside>
 
-      <main className="flex-1 overflow-hidden flex flex-col md:flex-row">
+      {/* MAIN CONTENT AREA */}
+      <main className="flex-1 overflow-hidden relative">
         
-        {/* BOOKINGS */}
+{/* TAB 1: BOOKINGS PAGE */}
         {activeTab === "bookings" && (
-           <div className="w-full p-4 md:p-8 overflow-y-auto">
-             <div className="max-w-7xl mx-auto space-y-4">
-               <div className="flex gap-4"><div className="flex-1 relative"><input type="text" placeholder="Search..." className="w-full p-3 pl-10 border border-gray-200 rounded-xl focus:ring-2 focus:ring-black outline-none shadow-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /><span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔍</span></div><button onClick={handleExportBookings} className="px-6 py-3 bg-green-50 text-green-700 border border-green-200 rounded-xl font-bold hover:bg-green-100">Export CSV</button><button onClick={handleRefresh} className={`px-6 py-3 bg-white border border-gray-200 rounded-xl font-bold shadow-sm hover:bg-gray-50 transition-all flex items-center gap-2 ${isRefreshing ? "opacity-70" : ""}`}><span className={isRefreshing ? "animate-spin" : ""}>↻</span></button></div>
-               <div className="bg-white rounded-xl shadow-sm border overflow-hidden"><div className="overflow-x-auto"><table className="w-full text-sm text-left min-w-[800px]"><thead className="bg-gray-50 font-bold text-gray-500 border-b"><tr><th className="p-4">Date</th><th className="p-4">User</th><th className="p-4">Service</th><th className="p-4">Payment</th><th className="p-4">Status</th><th className="p-4">Action</th></tr></thead><tbody className="divide-y">{filteredBookings.length > 0 ? filteredBookings.map(b => (<tr key={b.id} className={`hover:bg-gray-50 ${b.status === 'cancelled' ? 'opacity-50 grayscale' : ''}`}><td className="p-4 font-bold">{b.booking_date}<br/><span className="text-xs font-normal text-gray-500">{b.time}</span></td><td className="p-4 font-bold">{b.user_name}<div className="text-xs font-normal text-blue-600 truncate max-w-[150px]">{b.user_email}</div><div className="text-xs font-normal text-gray-500">{b.user_phone}</div></td><td className="p-4">{b.service_type}<div className="text-xs text-gray-400">{b.duration}</div></td><td className="p-4"><div className="text-xs font-bold uppercase">{b.payment_method}</div>{b.payment_method === 'QR Code' && (<div className="text-xs font-mono bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded mt-1 inline-block border border-yellow-200">UTR: {b.transaction_id}</div>)}</td><td className="p-4"><span className={`px-2 py-1 rounded text-xs font-bold uppercase ${b.status==='confirmed'?'bg-green-100 text-green-700': b.status==='pending' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>{b.status}</span></td><td className="p-4 flex gap-2">{(b.status === 'pending' || b.status === 'payment_review') && <button onClick={() => handleVerifyPayment(b.id)} className="text-blue-600 font-bold text-xs hover:underline">Confirm</button>}{b.status !== 'cancelled' && <button onClick={() => handleCancelBooking(b.id)} className="text-red-600 font-bold text-xs hover:underline">Cancel</button>}</td></tr>)) : (<tr><td colSpan={6} className="p-8 text-center text-gray-400">No results.</td></tr>)}</tbody></table></div></div>
+           <div className="w-full h-full overflow-y-auto bg-slate-50/50 relative">
+             <div className="absolute top-0 left-0 w-full h-64 bg-gradient-to-b from-blue-50/50 to-transparent pointer-events-none"></div>
+             <div className="max-w-7xl mx-auto p-6 md:p-10 space-y-8 relative z-10">
+               
+               {/* Controls Header */}
+               <div className="flex flex-col md:flex-row gap-6 justify-between items-end">
+                   <div>
+                       <h2 className="font-black text-4xl tracking-tighter text-slate-900 mb-1">BOOKINGS</h2>
+                       <p className="text-slate-400 font-medium text-sm">Manage sessions & Verify payments.</p>
+                   </div>
+                   <div className="flex gap-3 w-full md:w-auto bg-white/80 backdrop-blur-md p-2 rounded-2xl shadow-sm border border-white/50">
+                       <input 
+                         type="text" 
+                         placeholder="Search..." 
+                         className="w-full pl-4 pr-4 py-3 bg-slate-50 border-0 rounded-xl text-sm font-bold text-slate-700 outline-none" 
+                         value={searchTerm} 
+                         onChange={(e) => setSearchTerm(e.target.value)} 
+                       />
+                       <button onClick={handleRefresh} className={`px-4 py-3 bg-black text-white rounded-xl font-bold hover:bg-zinc-800 ${isRefreshing?"animate-spin":""}`}>↻</button>
+                   </div>
+               </div>
+
+               {/* --- FILTER NAVIGATION (USES NEW VARIABLE) --- */}
+               <div className="flex flex-col md:flex-row justify-between items-end mb-8 gap-4">
+                 <div className="flex bg-slate-100 p-1.5 rounded-2xl w-full md:w-auto">
+                   {['pending', 'upcoming', 'history'].map((tab) => (
+                     <button
+                       key={tab}
+                       type="button"
+                       onClick={() => setBookingFilter(tab as any)} // 🔒 UPDATES FILTER, NOT PAGE
+                       className={`flex-1 md:flex-none px-8 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
+                         bookingFilter === tab 
+                         ? 'bg-white text-black shadow-md ring-1 ring-black/5' 
+                         : 'text-slate-400 hover:text-slate-600'
+                       }`}
+                     >
+                       {tab}
+                     </button>
+                   ))}
+                 </div>
+                 <div className="hidden md:block text-right">
+                   <span className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">{bookingFilter} Queue</span>
+                   <span className="text-2xl font-black text-slate-900 leading-none">{filteredBookings.length}</span>
+                 </div>
+               </div>
+
+{/* --- 3. INTELLIGENT DATA LIST (OVERDUE AWARE) --- */}
+               <div className="flex flex-col gap-3">
+                 {filteredBookings.length > 0 ? (
+                   filteredBookings.map((b) => {
+                     // ⏳ TIME TRAVEL LOGIC
+                     const bookingDate = new Date(b.booking_date);
+                     const today = new Date();
+                     today.setHours(0, 0, 0, 0); // Reset time to midnight for fair comparison
+                     
+                     // Check if booking is in the past (before today) AND not resolved
+                     const isPast = bookingDate < today;
+                     const isUnresolved = !['done', 'cancelled', 'rejected'].includes((b.status || '').toLowerCase());
+                     const isOverdue = isPast && isUnresolved;
+
+                     return (
+                       <div 
+                         key={b.id} 
+                         className={`border rounded-xl p-4 shadow-sm hover:shadow-md transition-all flex flex-col md:flex-row items-center gap-4 group relative overflow-hidden ${
+                           isOverdue 
+                           ? 'bg-red-50/40 border-red-300 ring-1 ring-red-100' // 🚨 OVERDUE STYLE
+                           : 'bg-white border-slate-200'
+                         }`}
+                       >
+                         {/* 🚨 OVERDUE WARNING STRIP */}
+                         {isOverdue && (
+                           <div className="absolute top-0 left-0 w-1 h-full bg-red-400"></div>
+                         )}
+                         
+                         {/* DATE CAPSULE */}
+                         <div className={`flex flex-col items-center justify-center w-14 h-14 rounded-lg shrink-0 text-white ${isOverdue ? 'bg-red-500 shadow-red-200' : 'bg-slate-900 shadow-slate-200'} shadow-lg`}>
+                           <span className="text-[9px] font-bold uppercase opacity-80">
+                             {b.booking_date ? new Date(b.booking_date).toLocaleDateString('en-GB', {month:'short'}) : 'NOV'}
+                           </span>
+                           <span className="text-xl font-bold leading-none">
+                             {b.booking_date ? new Date(b.booking_date).getDate() : '00'}
+                           </span>
+                         </div>
+
+                         {/* CLIENT IDENTITY */}
+                         <div className="flex-1 min-w-[180px] text-center md:text-left">
+                           <div className="flex items-center justify-center md:justify-start gap-2">
+                             <h3 className="font-bold text-slate-900 text-sm truncate uppercase tracking-tight">
+                               {b.user_name || "Unknown Client"}
+                             </h3>
+                             {/* 🚨 OVERDUE BADGE */}
+                             {isOverdue && (
+                               <span className="px-2 py-0.5 bg-red-100 text-red-600 text-[9px] font-black uppercase rounded-full animate-pulse border border-red-200">
+                                 ⚠ Action Required
+                               </span>
+                             )}
+                           </div>
+                           <div className="flex flex-wrap justify-center md:justify-start gap-4 mt-1 text-xs text-slate-500 font-medium">
+                             <span className="flex items-center gap-1 bg-slate-50/50 px-2 py-0.5 rounded">📞 {b.user_phone || "--"}</span>
+                             <span className="hidden lg:flex items-center gap-1 bg-slate-50/50 px-2 py-0.5 rounded">✉️ {b.user_email || "--"}</span>
+                           </div>
+                         </div>
+
+                         {/* SERVICE DETAILS */}
+                         <div className="md:w-48 hidden md:block border-l border-slate-200/50 pl-4">
+                           <p className="font-bold text-slate-800 text-xs truncate">{b.service_type || "General Session"}</p>
+                           <p className={`text-[10px] font-mono mt-0.5 ${isOverdue ? 'text-red-400 font-bold' : 'text-slate-500'}`}>
+                             🕒 {b.time} ({b.duration || '60m'})
+                           </p>
+                         </div>
+
+{/* FINANCIAL AUDIT (WITH COUPON TRACKER) */}
+                         <div className={`md:w-40 text-right px-3 py-2 rounded-lg border min-w-[140px] flex flex-col justify-center ${isOverdue ? 'bg-white border-red-100' : 'bg-slate-50 border-slate-100'}`}>
+                           
+                           {/* Row 1: Method & Price */}
+                           <div className="flex justify-between items-center gap-2">
+                             <span className={`text-[9px] font-black uppercase ${b.payment_method?.toLowerCase().includes('qr') ? 'text-blue-600' : 'text-green-600'}`}>
+                               {b.payment_method?.toLowerCase().includes('qr') ? 'UPI' : 'CASH'}
+                             </span>
+                             <span className="text-sm font-black text-slate-900">₹{b.total_amount}</span>
+                           </div>
+
+                           {/* Row 2: Coupon Code (Only shows if applied) */}
+                           {b.coupon_code && (
+                             <div className="flex justify-end items-center gap-1 mt-0.5">
+                               <span className="text-[9px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded border border-green-100 uppercase tracking-wide truncate max-w-[100px]">
+                                 🎟 {b.coupon_code}
+                               </span>
+                             </div>
+                           )}
+
+                           {/* Row 3: UTR / Reference */}
+                           <div className="text-[10px] font-mono text-slate-500 truncate mt-0.5 select-all" title={b.transaction_id}>
+                             {b.transaction_id || 'N/A'}
+                           </div>
+                         </div>
+
+                         {/* --- ACTION BUTTONS --- */}
+                         <div className="flex gap-2 w-full md:w-auto mt-3 md:mt-0 justify-end md:pl-4 md:border-l md:border-slate-200/50 min-w-fit">
+                           
+                           {bookingFilter === 'pending' && (
+                             <>
+                               <button type="button" onClick={(e) => { e.stopPropagation(); handleVerifyPayment(b.id); }} className="px-4 py-2 bg-black text-white font-bold text-[10px] uppercase rounded-lg hover:bg-zinc-800 shadow-lg whitespace-nowrap active:scale-95 transition-transform">Approve</button>
+                               <button type="button" onClick={(e) => { e.stopPropagation(); handleCancelBooking(b.id); }} className="px-3 py-2 border border-red-200 text-red-500 font-bold text-[10px] uppercase rounded-lg hover:bg-red-50 active:scale-95 transition-transform">✕</button>
+                             </>
+                           )}
+
+                           {bookingFilter === 'upcoming' && (
+                             <>
+                               <button type="button" onClick={(e) => { e.stopPropagation(); openReschedule(b); }} className="px-3 py-2 bg-slate-100 text-slate-700 font-bold text-[10px] uppercase rounded-lg hover:bg-slate-200 active:scale-95 transition-transform">Move</button>
+                               <button type="button" onClick={(e) => { e.stopPropagation(); handleMarkDone(b.id); }} className="px-4 py-2 bg-blue-600 text-white font-bold text-[10px] uppercase rounded-lg hover:bg-blue-700 shadow-lg whitespace-nowrap active:scale-95 transition-transform">Done</button>
+                               {/* Cancel for Upcoming */}
+                               <button type="button" onClick={(e) => { e.stopPropagation(); handleCancelBooking(b.id); }} className="px-3 py-2 border border-red-200 text-red-500 font-bold text-[10px] uppercase rounded-lg hover:bg-red-50" title="Cancel Booking">✕</button>
+                             </>
+                           )}
+
+                           {bookingFilter === 'history' && (
+                              <span className={`px-3 py-1.5 rounded-md text-[10px] font-black uppercase border ${(b.status||'').toLowerCase().includes('done') ? 'bg-slate-100 text-slate-500' : 'bg-red-50 text-red-400'}`}>
+                                {(b.status||'').toLowerCase().includes('done') ? 'Completed' : 'Cancelled'}
+                              </span>
+                           )}
+                         </div>
+
+                       </div> 
+                       
+                     );
+                   })
+                 ) : (
+                   <div className="py-24 text-center border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50">
+                     <p className="text-xs font-black text-slate-400 uppercase tracking-widest">No {bookingFilter} Bookings Found</p>
+                   </div>
+                 )}
+               </div>
+
+               {/* MODAL & EXTRAS STAY HERE */}
+               {rescheduleTarget && (
+                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+                   <div className="bg-white rounded-[2rem] p-8 w-full max-w-sm shadow-2xl scale-100 border border-zinc-100">
+                     <h3 className="text-xl font-black mb-1 text-center">SMART MOVE</h3>
+                     <p className="text-xs text-slate-500 text-center mb-6">Rescheduling <strong>{rescheduleTarget.user_name}</strong></p>
+                     <div className="space-y-4 mb-8">
+                       <input type="date" min={new Date().toLocaleDateString('en-CA')} value={rescheduleDate} onChange={e => { setRescheduleDate(e.target.value); setRescheduleTime(""); calculateAvailability(e.target.value, rescheduleTarget); }} className="w-full p-4 bg-slate-50 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+                       <select value={rescheduleTime} onChange={e => setRescheduleTime(e.target.value)} disabled={calculatingSlots || smartSlots.length === 0} className="w-full p-4 rounded-xl font-bold text-sm outline-none bg-blue-50 text-blue-900">
+                           <option value="">{calculatingSlots ? "Calculating..." : "Select Smart Slot"}</option>
+                           {smartSlots.map(slot => <option key={slot} value={slot}>{slot}</option>)}
+                       </select>
+                     </div>
+                     <div className="flex gap-3">
+                       <button onClick={() => setRescheduleTarget(null)} className="flex-1 py-4 bg-white border border-slate-200 text-slate-600 font-bold rounded-xl uppercase tracking-wider hover:bg-slate-50 text-xs">Cancel</button>
+                       <button onClick={confirmReschedule} className="flex-1 py-4 bg-black text-white font-bold rounded-xl uppercase tracking-wider hover:bg-zinc-800 shadow-lg text-xs">Confirm</button>
+                     </div>
+                   </div>
+                 </div>
+               )}
              </div>
            </div>
         )}
 
-        {/* INBOX */}
+{/* TAB 2: INBOX (REDESIGNED) */}
         {activeTab === "inbox" && (
-            <div className="w-full p-4 md:p-8 overflow-y-auto">
-                <div className="max-w-4xl mx-auto space-y-4">
-                    <h2 className="font-bold text-xl">Message Inbox</h2>
-                    {messages.length === 0 ? (
-                        <div className="text-center py-20 text-gray-400">No new messages.</div>
-                    ) : (
-                        <div className="space-y-4">
-                            {messages.map(m => (
-                                <div key={m.id} className="bg-white p-6 rounded-xl shadow-sm border flex flex-col md:flex-row gap-4 justify-between">
-                                    <div className="flex-1 space-y-2">
-                                        <div className="flex items-baseline gap-3">
-                                            <h3 className="font-bold text-lg">{m.name}</h3>
-                                            <span className="text-xs text-gray-400">{new Date(m.created_at).toLocaleDateString()}</span>
-                                        </div>
-                                        <p className="text-blue-600 font-medium text-sm">{m.phone}</p>
-                                        <p className="text-gray-600 bg-gray-50 p-4 rounded-lg text-sm leading-relaxed whitespace-pre-line border">{m.message}</p>
+           <div className="w-full h-full overflow-y-auto bg-slate-50/50 relative">
+             <div className="absolute top-0 left-0 w-full h-64 bg-gradient-to-b from-purple-50/50 to-transparent pointer-events-none"></div>
+             <div className="max-w-5xl mx-auto p-6 md:p-10 space-y-8 relative z-10">
+               
+               {/* HEADER CONTROLS */}
+               <div className="flex flex-col md:flex-row gap-6 justify-between items-end">
+                   <div>
+                       <h2 className="font-black text-4xl tracking-tighter text-slate-900 mb-1">INBOX</h2>
+                       <p className="text-slate-400 font-medium text-sm">Client inquiries & support tickets.</p>
+                   </div>
+                   
+                   {/* Refresh Button */}
+                   <div className="flex items-center gap-3">
+                       <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 hidden md:block">
+                           {messages.length} Messages
+                       </span>
+                       <button 
+                           onClick={handleRefresh} 
+                           className={`px-4 py-3 bg-white border border-white/50 shadow-sm rounded-xl font-bold hover:bg-slate-50 text-slate-900 transition-all ${isRefreshing ? "animate-spin" : ""}`}
+                       >
+                           ↻
+                       </button>
+                   </div>
+               </div>
+
+               {/* MESSAGES LIST */}
+               <div className="space-y-4">
+                   {messages.length > 0 ? (
+                       messages.map((msg) => (
+                           <div key={msg.id} className="group bg-white rounded-3xl p-6 border border-slate-100 shadow-sm hover:shadow-lg transition-all relative">
+                               <div className="flex flex-col md:flex-row gap-6 items-start">
+                                   
+                                   {/* AVATAR / INITIALS */}
+                                   <div className="w-12 h-12 bg-purple-100 text-purple-600 rounded-2xl flex items-center justify-center font-black text-lg shrink-0 uppercase">
+                                       {msg.name ? msg.name.substring(0, 2) : "??"}
+                                   </div>
+
+                                   {/* CONTENT */}
+                                   <div className="flex-1 space-y-3 w-full">
+                                       <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-2">
+                                           <div>
+                                               <h3 className="font-black text-slate-900 text-lg uppercase tracking-tight">{msg.name || "Unknown Sender"}</h3>
+                                               <p className="text-xs font-bold text-slate-400">
+                                                   {new Date(msg.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} • {new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                               </p>
+                                           </div>
+                                           
+                                           {/* QUICK ACTIONS */}
+                                           <div className="flex gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all duration-200">
+                                               {msg.phone && (
+                                                   <a 
+                                                       href={`tel:${msg.phone}`} 
+                                                       className="px-4 py-2 bg-slate-100 text-slate-600 text-[10px] font-black uppercase tracking-wider rounded-lg hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                                                   >
+                                                       📞 Call
+                                                   </a>
+                                               )}
+                                               <button 
+                                                   onClick={() => handleDeleteMessage(msg.id)} 
+                                                   className="px-4 py-2 bg-white border border-red-100 text-red-400 text-[10px] font-black uppercase tracking-wider rounded-lg hover:bg-red-50 hover:text-red-600 transition-colors shadow-sm"
+                                               >
+                                                   Delete
+                                               </button>
+                                           </div>
+                                       </div>
+
+                                       {/* MESSAGE BODY */}
+                                       <div className="bg-slate-50 p-5 rounded-2xl text-slate-700 text-sm font-medium leading-relaxed border border-slate-100">
+                                           "{msg.message}"
+                                       </div>
+
+                                       {/* CONTACT FOOTER */}
+                                       <div className="flex flex-wrap gap-4 pt-2">
+                                           {msg.phone && (
+                                               <span className="flex items-center gap-1.5 text-xs font-bold text-slate-500">
+                                                   <span className="w-2 h-2 rounded-full bg-green-400"></span>
+                                                   {msg.phone}
+                                               </span>
+                                           )}
+                                           {msg.email && (
+                                               <span className="flex items-center gap-1.5 text-xs font-bold text-slate-500">
+                                                   <span className="w-2 h-2 rounded-full bg-blue-400"></span>
+                                                   {msg.email}
+                                               </span>
+                                           )}
+                                       </div>
+                                   </div>
+                               </div>
+                           </div>
+                       ))
+                   ) : (
+                       // EMPTY STATE
+                       <div className="py-24 text-center bg-white/50 rounded-[3rem] border-2 border-dashed border-slate-200">
+                           <div className="w-16 h-16 bg-purple-50 text-purple-300 rounded-2xl flex items-center justify-center mx-auto mb-4 text-2xl">
+                               📫
+                           </div>
+                           <p className="text-xs font-black text-slate-400 uppercase tracking-[0.3em]">No New Messages</p>
+                       </div>
+                   )}
+               </div>
+             </div>
+           </div>
+        )}
+                
+{/* TAB 3: SERVICES (PIXEL-PERFECT ALIGNMENT) */}
+        {activeTab === "services" && (
+            <div className="w-full h-full overflow-y-auto bg-slate-50/50 p-6 md:p-10">
+                
+                {/* HEADER */}
+                <div className="flex justify-between items-center mb-10">
+                    <div>
+                        <h2 className="font-black text-4xl tracking-tighter text-slate-900 uppercase leading-none">Services</h2>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mt-2">Asset Configuration V3.5</p>
+                    </div>
+                    <button 
+                        onClick={() => { 
+                            setEditingService({ 
+                                id: 0, title: "", duration: "", 
+                                variants: [], 
+                                price: 0, previous_price: 0, 
+                                price_30: 0, previous_price_30: 0, description: "", 
+                                image_url: "", detail_image_url: "", booking_image_url: "", 
+                                is_active: true, type: "single", capacity: 1 
+                            }); 
+                            setServiceFiles({ home: null, detail: null, book: null }); 
+                            setIsServiceModalOpen(true); 
+                        }} 
+                        className="px-8 py-4 bg-black text-white font-black rounded-2xl uppercase tracking-tighter text-xs hover:invert transition-all shadow-xl"
+                    >
+                        + New Service
+                    </button>
+                </div>
+                
+                {/* SERVICE GRID */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 pb-20">
+                    {services.map(s => (
+                        <div key={s.id} className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-100 group hover:shadow-2xl transition-all duration-500 relative overflow-hidden">
+                            <div className="flex justify-between items-start mb-6">
+                                <div className="max-w-[70%]">
+                                    <h3 className="font-black text-2xl tracking-tighter text-slate-800 uppercase truncate">{s.title}</h3>
+                                    <div className="flex gap-2 mt-1">
+                                        <span className="text-[9px] font-black px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full uppercase italic">{s.type}</span>
+                                        <span className="text-[9px] font-black px-2 py-0.5 bg-slate-100 text-slate-500 rounded-full uppercase">Cap: {s.capacity}</span>
                                     </div>
-                                    <div>
-                                        <button onClick={() => handleDeleteMessage(m.id)} className="px-4 py-2 bg-white border border-red-200 text-red-500 rounded-lg text-xs font-bold hover:bg-red-50 transition-colors">Archive</button>
+                                </div>
+                                <button onClick={() => { setEditingService(s); setIsServiceModalOpen(true); }} className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center hover:bg-black hover:text-white transition-all">
+                                    <span className="text-[10px] font-black uppercase">Edit</span>
+                                </button>
+                            </div>
+
+                            <div className="space-y-2 mb-6">
+                                {(s.variants || []).filter((v:any) => v.active).slice(0, 3).map((v: any) => (
+                                    <div key={v.id} className="flex justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-100">
+                                        <span className="text-[10px] font-black uppercase text-slate-500">⏳ {v.duration}</span>
+                                        <div className="font-black text-slate-900 text-sm">
+                                            ₹{v.price}
+                                            {v.old_price > 0 && <span className="ml-2 text-[9px] line-through text-slate-300">₹{v.old_price}</span>}
+                                        </div>
+                                    </div>
+                                ))}
+                                {(s.variants || []).length === 0 && <div className="text-xs text-red-400 font-bold">No pricing options set!</div>}
+                            </div>
+
+                            <div className="flex justify-between items-center pt-4 border-t border-slate-50">
+                                <div className="flex items-center gap-2">
+                                    <div className={`w-2 h-2 rounded-full ${s.is_active ? 'bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]' : 'bg-red-500'}`}></div>
+                                    <span className="text-[10px] font-black uppercase text-slate-500 tracking-widest">{s.is_active ? 'Live' : 'Offline'}</span>
+                                </div>
+                                <button onClick={() => toggleServiceActive(s)} className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-tighter transition-all ${s.is_active ? 'bg-zinc-100 text-zinc-900' : 'bg-black text-white'}`}>
+                                    {s.is_active ? 'Take Offline' : 'Bring Live'}
+                                </button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+                
+                {/* --- EDITOR MODAL --- */}
+                {isServiceModalOpen && editingService && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                        <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md transition-opacity" onClick={() => setIsServiceModalOpen(false)} />
+
+                        <form onSubmit={handleSaveService} className="relative w-full max-w-3xl bg-white rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200">
+                            
+                            {/* Modal Header */}
+                            <div className="flex justify-between items-center p-8 pb-4 bg-white/80 backdrop-blur-xl z-20 sticky top-0 border-b border-slate-50">
+                                <div>
+                                    <span className="text-[10px] font-black text-blue-600 uppercase tracking-[0.3em] flex items-center gap-1">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse"></span>
+                                        Editor Protocol
+                                    </span>
+                                    <h3 className="font-black text-3xl tracking-tighter uppercase text-slate-900 mt-1">
+                                        {editingService.id === 0 ? "Create Asset" : "Modify Asset"}
+                                    </h3>
+                                </div>
+                                <button type="button" onClick={() => setIsServiceModalOpen(false)} className="w-10 h-10 rounded-full bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-red-500 font-bold transition-all flex items-center justify-center">✕</button>
+                            </div>
+
+                            {/* Modal Content - CUSTOM SCROLLBAR ADDED HERE */}
+                            <div className="overflow-y-auto p-8 pt-6 space-y-8 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-slate-300">
+                                
+                                {/* 1. Identity Section */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div className="col-span-1 md:col-span-2 space-y-2">
+                                        <label className="text-[10px] font-black uppercase text-slate-400 ml-3 tracking-widest">Service Title</label>
+                                        <input className="w-full p-4 pl-6 bg-slate-50 rounded-2xl font-bold text-xl text-slate-900 outline-none border-2 border-transparent focus:border-blue-500 focus:bg-white transition-all placeholder:text-slate-300" placeholder="e.g. Cryotherapy Chamber" value={editingService.title} onChange={e => setEditingService({...editingService, title: e.target.value})} />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black uppercase text-slate-400 ml-3 tracking-widest">Type</label>
+                                        <div className="relative">
+                                            <select className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-sm outline-none border-2 border-transparent focus:border-blue-500 appearance-none cursor-pointer" value={editingService.type} onChange={e => setEditingService({...editingService, type: e.target.value})}>
+                                                <option value="single">Single Session</option>
+                                                <option value="combo">Combo Package</option>
+                                            </select>
+                                            <span className="absolute right-5 top-1/2 -translate-y-1/2 text-xs text-slate-400 pointer-events-none">▼</span>
+                                        </div>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black uppercase text-slate-400 ml-3 tracking-widest">Capacity</label>
+                                        <input type="number" className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-sm outline-none border-2 border-transparent focus:border-blue-500" value={editingService.capacity} onChange={e => setEditingService({...editingService, capacity: Number(e.target.value)})} />
+                                    </div>
+                                </div>
+
+                                {/* 2. Pricing Matrix (FIXED ALIGNMENT) */}
+                                <div className="bg-slate-50 p-6 rounded-[2.5rem] border border-slate-100 space-y-5">
+                                    <div className="flex justify-between items-center px-2">
+                                        <div>
+                                            <h4 className="font-black text-sm uppercase text-slate-800 tracking-tight">Pricing Matrix</h4>
+                                            <p className="text-[10px] font-bold text-slate-400">Manage durations and costs.</p>
+                                        </div>
+                                        <button type="button" onClick={() => {
+                                            const newVariant = { id: Date.now().toString(), duration: "", price: 0, old_price: 0, active: true };
+                                            setEditingService({ ...editingService, variants: [...(editingService.variants || []), newVariant] });
+                                        }} className="px-5 py-3 bg-black text-white text-[10px] font-black uppercase rounded-xl hover:bg-slate-800 shadow-lg hover:shadow-xl transition-all flex items-center gap-2">
+                                            <span>+</span> Add Option
+                                        </button>
+                                    </div>
+
+                                    <div className="space-y-3">
+                                        {(editingService.variants || []).map((v: any) => (
+                                            /* GRID LAYOUT FOR PERFECT ALIGNMENT */
+                                            <div key={v.id} className="grid grid-cols-12 gap-3 bg-white p-3 rounded-2xl shadow-sm items-center border border-slate-100 hover:border-blue-200 transition-all">
+                                                
+                                                {/* Duration (Col 1-5) */}
+                                                <div className="col-span-5 flex items-center gap-2 bg-slate-50 rounded-xl px-3 py-2">
+                                                    <span className="text-lg opacity-30">⏳</span>
+                                                    <input 
+                                                        placeholder="e.g. 60 Mins" 
+                                                        className="w-full bg-transparent font-bold text-sm outline-none placeholder:text-slate-300" 
+                                                        value={v.duration} 
+                                                        onChange={(e) => {
+                                                            const updated = editingService.variants.map((vt:any) => vt.id === v.id ? { ...vt, duration: e.target.value } : vt);
+                                                            setEditingService({ ...editingService, variants: updated });
+                                                        }} 
+                                                    />
+                                                </div>
+
+                                                {/* Price (Col 6-8) */}
+                                                <div className="col-span-3 flex items-center gap-1 bg-slate-50 rounded-xl px-3 py-2">
+                                                    <span className="text-xs font-bold text-slate-400">₹</span>
+                                                    <input 
+                                                        type="number" 
+                                                        placeholder="0"
+                                                        className="w-full bg-transparent font-black text-sm outline-none text-green-700 placeholder:text-slate-300" 
+                                                        value={v.price} 
+                                                        onChange={(e) => {
+                                                            const updated = editingService.variants.map((vt:any) => vt.id === v.id ? { ...vt, price: Number(e.target.value) } : vt);
+                                                            setEditingService({ ...editingService, variants: updated });
+                                                        }} 
+                                                    />
+                                                </div>
+
+                                                {/* Old Price (Col 9-10) */}
+                                                <div className="col-span-2 flex items-center gap-1 bg-slate-50 rounded-xl px-3 py-2 border border-transparent focus-within:border-red-100 transition-colors">
+                                                    <span className="text-[10px] font-bold text-slate-300 line-through">₹</span>
+                                                    <input 
+                                                        type="number" 
+                                                        placeholder="Old"
+                                                        className="w-full bg-transparent font-bold text-xs text-slate-400 outline-none placeholder:text-slate-200" 
+                                                        value={v.old_price || ''} 
+                                                        onChange={(e) => {
+                                                            const updated = editingService.variants.map((vt:any) => vt.id === v.id ? { ...vt, old_price: Number(e.target.value) } : vt);
+                                                            setEditingService({ ...editingService, variants: updated });
+                                                        }} 
+                                                    />
+                                                </div>
+
+                                                {/* Controls (Col 11-12) */}
+                                                <div className="col-span-2 flex justify-end gap-2">
+                                                    <button 
+                                                        type="button" 
+                                                        onClick={() => {
+                                                            const updated = editingService.variants.map((vt:any) => vt.id === v.id ? { ...vt, active: !vt.active } : vt);
+                                                            setEditingService({ ...editingService, variants: updated });
+                                                        }}
+                                                        className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${v.active ? 'bg-green-100 text-green-600' : 'bg-slate-100 text-slate-300'}`}
+                                                        title="Toggle Active"
+                                                    >
+                                                        {v.active ? '●' : '○'}
+                                                    </button>
+                                                    <button 
+                                                        type="button" 
+                                                        onClick={() => setEditingService({ ...editingService, variants: editingService.variants.filter((vt:any) => vt.id !== v.id) })} 
+                                                        className="w-8 h-8 rounded-lg text-slate-300 hover:bg-red-50 hover:text-red-500 flex items-center justify-center font-bold transition-all"
+                                                        title="Remove Option"
+                                                    >
+                                                        ✕
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {(editingService.variants || []).length === 0 && (
+                                            <div className="text-center py-8 text-slate-300 border-2 border-dashed border-slate-200 rounded-2xl">
+                                                <p className="text-[10px] font-black uppercase tracking-widest">No options added</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* 3. Visuals */}
+                                <div className="space-y-4">
+                                    <label className="text-[10px] font-black uppercase text-slate-400 ml-3 tracking-widest">Visual Experience</label>
+                                    <div className="grid grid-cols-3 gap-4">
+                                        {['home', 'detail', 'book'].map((key) => (
+                                            <label key={key} className="cursor-pointer group relative aspect-square bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 hover:border-blue-400 hover:bg-blue-50 transition-all flex flex-col items-center justify-center overflow-hidden">
+                                                {serviceFiles[key as keyof typeof serviceFiles] ? (
+                                                    <img src={URL.createObjectURL(serviceFiles[key as keyof typeof serviceFiles] as File)} className="absolute inset-0 w-full h-full object-cover" />
+                                                ) : editingService[key === 'home' ? 'image_url' : key === 'detail' ? 'detail_image_url' : 'booking_image_url'] ? (
+                                                     <img src={editingService[key === 'home' ? 'image_url' : key === 'detail' ? 'detail_image_url' : 'booking_image_url']} className="absolute inset-0 w-full h-full object-cover opacity-50 group-hover:opacity-100 transition-opacity" />
+                                                ) : (
+                                                    <div className="text-center group-hover:scale-110 transition-transform">
+                                                        <span className="text-2xl block mb-1 opacity-20">📷</span>
+                                                        <span className="text-[8px] font-black uppercase text-slate-400">{key}</span>
+                                                    </div>
+                                                )}
+                                                <input type="file" className="hidden" onChange={e => e.target.files && setServiceFiles({...serviceFiles, [key]: e.target.files[0]})} />
+                                                {/* Hover Overlay */}
+                                                <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <span className="text-[10px] font-bold text-white uppercase tracking-widest">Change</span>
+                                                </div>
+                                            </label>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Modal Footer */}
+                            <div className="p-6 bg-white border-t border-slate-50 z-20">
+                                <button type="submit" className="w-full py-5 bg-black text-white font-black rounded-2xl uppercase text-xs tracking-[0.2em] shadow-xl hover:shadow-2xl hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-3">
+                                    <span>💾</span> Commit Changes
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                )}
+            </div>
+        )}
+        
+{/* TAB 4: FOUNDER PROFILE (High-Fidelity) */}
+        {activeTab === "founder" && founderProfile && (
+            <div className="w-full h-full overflow-y-auto bg-slate-50/50 p-6 md:p-10">
+                <div className="max-w-4xl mx-auto space-y-8">
+                    {/* Header */}
+                    <div>
+                        <h2 className="font-black text-4xl tracking-tighter text-slate-900 uppercase leading-none">Founder Profile</h2>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mt-2">Public Identity Configuration</p>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-5 gap-8">
+                        {/* LEFT: EDIT FORM */}
+                        <form onSubmit={handleSaveFounder} className="md:col-span-3 bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 space-y-6 relative overflow-hidden">
+                            <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-blue-500 to-purple-500"></div>
+                            
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black uppercase text-slate-400 ml-3 tracking-widest">Full Name</label>
+                                <input className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-lg outline-none focus:ring-2 focus:ring-black transition-all" value={founderProfile.name} onChange={e => setFounderProfile({...founderProfile, name: e.target.value})} placeholder="e.g. John Doe" />
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black uppercase text-slate-400 ml-3 tracking-widest">Role / Title</label>
+                                <input className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-sm outline-none focus:ring-2 focus:ring-blue-500 transition-all text-blue-600" value={founderProfile.role} onChange={e => setFounderProfile({...founderProfile, role: e.target.value})} placeholder="e.g. Head of Recovery" />
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black uppercase text-slate-400 ml-3 tracking-widest">Biography</label>
+                                <textarea rows={6} className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-sm outline-none focus:ring-2 focus:ring-black transition-all leading-relaxed resize-none" value={founderProfile.bio} onChange={e => setFounderProfile({...founderProfile, bio: e.target.value})} placeholder="Tell your story..." />
+                            </div>
+
+                            <div className="pt-4">
+                                <button className="w-full py-5 bg-black text-white font-black rounded-2xl uppercase text-xs tracking-[0.2em] shadow-xl hover:scale-[1.02] transition-transform">
+                                    Save Profile Data
+                                </button>
+                            </div>
+                        </form>
+
+                        {/* RIGHT: PREVIEW CARD */}
+                        <div className="md:col-span-2 space-y-6">
+                            <div className="bg-white p-6 rounded-[2.5rem] shadow-lg border border-slate-100 text-center relative group">
+                                <div className="w-full aspect-[4/5] rounded-[2rem] overflow-hidden bg-slate-100 relative mb-6 shadow-inner">
+                                    <img src={founderProfile.image_url || "https://via.placeholder.com/400"} alt="Founder" className="w-full h-full object-cover" />
+                                    
+                                    {/* Upload Overlay */}
+                                    <label className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center cursor-pointer">
+                                        <span className="text-3xl mb-2">📸</span>
+                                        <span className="text-white text-[10px] font-black uppercase tracking-widest">Change Photo</span>
+                                        <input type="file" className="hidden" onChange={e => e.target.files && setFounderFile(e.target.files[0])} accept="image/*" />
+                                    </label>
+                                </div>
+                                <h3 className="font-black text-2xl uppercase leading-none">{founderProfile.name || "Name"}</h3>
+                                <p className="text-xs font-bold text-blue-600 uppercase tracking-widest mt-1 mb-4">{founderProfile.role || "Role"}</p>
+                            </div>
+                            <div className="bg-blue-50 p-6 rounded-3xl border border-blue-100">
+                                <p className="text-[10px] font-bold text-blue-400 uppercase tracking-widest mb-2">💡 Tip</p>
+                                <p className="text-xs font-medium text-blue-800 leading-relaxed">
+                                    Use a professional portrait with good lighting. This image appears on your public "About" page.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* TAB 5: REVIEWS (High-Fidelity) */}
+        {activeTab === "testimonials" && (
+            <div className="w-full h-full overflow-y-auto bg-slate-50/50 p-6 md:p-10">
+                <div className="max-w-6xl mx-auto">
+                    <div className="flex justify-between items-end mb-10">
+                        <div>
+                            <h2 className="font-black text-4xl tracking-tighter text-slate-900 uppercase leading-none">Client Voices</h2>
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mt-2">Testimonial Management</p>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        {/* LEFT: ADD FORM */}
+                        <form onSubmit={handleAddTestimonial} className="bg-black text-white p-8 rounded-[2.5rem] shadow-2xl h-fit relative overflow-hidden">
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-blue-600 blur-[60px] opacity-50 pointer-events-none"></div>
+                            
+                            <h3 className="font-black text-2xl uppercase mb-6 relative z-10">Add Review</h3>
+                            
+                            <div className="space-y-4 relative z-10">
+                                <input placeholder="Client Name" className="w-full p-4 bg-zinc-900 border border-zinc-800 rounded-2xl text-sm font-bold text-white placeholder:text-zinc-600 focus:border-blue-500 outline-none transition-all" value={newTestimonial.name} onChange={e => setNewTestimonial({...newTestimonial, name: e.target.value})} />
+                                <textarea rows={4} placeholder="Their experience..." className="w-full p-4 bg-zinc-900 border border-zinc-800 rounded-2xl text-sm font-bold text-white placeholder:text-zinc-600 focus:border-blue-500 outline-none transition-all resize-none" value={newTestimonial.message} onChange={e => setNewTestimonial({...newTestimonial, message: e.target.value})} />
+                                <div className="flex items-center gap-2">
+                                    <span className="text-[10px] font-black uppercase text-zinc-500">Rating:</span>
+                                    {[1,2,3,4,5].map(star => (
+                                        <button type="button" key={star} onClick={() => setNewTestimonial({...newTestimonial, rating: star})} className={`text-xl transition-transform hover:scale-125 ${newTestimonial.rating >= star ? 'grayscale-0' : 'grayscale opacity-30'}`}>⭐</button>
+                                    ))}
+                                </div>
+                                <button className="w-full py-4 bg-white text-black font-black rounded-xl uppercase text-xs tracking-widest hover:bg-blue-500 hover:text-white transition-all mt-2">
+                                    Publish Review
+                                </button>
+                            </div>
+                        </form>
+
+                        {/* RIGHT: REVIEW GRID */}
+                        <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {testimonials.map(t => (
+                                <div key={t.id} className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-md transition-all group relative">
+                                    <div className="absolute top-6 right-6 text-4xl text-slate-100 font-serif leading-none">"</div>
+                                    
+                                    <div className="flex items-center gap-1 mb-3 text-xs">
+                                        {Array(t.rating).fill(0).map((_, i) => <span key={i}>⭐</span>)}
+                                    </div>
+                                    
+                                    <p className="text-sm font-medium text-slate-600 mb-4 leading-relaxed line-clamp-3">
+                                        {t.message}
+                                    </p>
+                                    
+                                    <div className="flex justify-between items-end border-t border-slate-50 pt-4">
+                                        <div>
+                                            <p className="font-black text-slate-900 uppercase text-sm">{t.name}</p>
+                                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Verified Client</p>
+                                        </div>
+                                        <button 
+                                            onClick={() => deleteTestimonial(t.id)} 
+                                            className="w-8 h-8 rounded-full bg-slate-50 text-slate-300 hover:bg-red-50 hover:text-red-500 flex items-center justify-center transition-all"
+                                        >
+                                            ✕
+                                        </button>
                                     </div>
                                 </div>
                             ))}
+                            {testimonials.length === 0 && (
+                                <div className="col-span-2 flex flex-col items-center justify-center p-12 text-slate-300 border-2 border-dashed border-slate-200 rounded-[2rem]">
+                                    <span className="text-4xl mb-2">💬</span>
+                                    <span className="text-xs font-black uppercase tracking-widest">No reviews yet</span>
+                                </div>
+                            )}
                         </div>
-                    )}
-                </div>
-            </div>
-        )}
-
-        {/* DISCOUNTS */}
-        {activeTab === "discounts" && (
-            <div className="w-full p-4 md:p-8 overflow-y-auto">
-                <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8">
-                    <div className="md:col-span-2 space-y-4">
-                        <h2 className="font-bold text-xl">Active Coupons</h2>
-                        {coupons.map(c => (
-                            <div key={c.id} className="bg-white p-4 rounded shadow-sm border flex justify-between items-center">
-                                <div><span className="font-mono font-bold text-lg bg-black text-white px-2 py-1 rounded">{c.code}</span><p className="text-sm text-gray-500 mt-1">{c.discount_type === 'percent' ? `${c.discount_value}% OFF` : `₹${c.discount_value} OFF`}</p></div>
-                                <button onClick={() => handleDeleteCoupon(c.id)} className="text-red-500 text-xs font-bold border px-3 py-1 rounded hover:bg-red-50">DELETE</button>
-                            </div>
-                        ))}
-                    </div>
-                    <div className="bg-white p-6 rounded shadow border h-fit">
-                        <h2 className="font-bold mb-4">Create Promo</h2>
-                        <form onSubmit={handleAddCoupon} className="space-y-4">
-                            <div><label className="label">Code</label><input className="input font-mono uppercase" required value={newCoupon.code} onChange={e => setNewCoupon({...newCoupon, code: e.target.value.toUpperCase()})} /></div>
-                            <div className="grid grid-cols-2 gap-2"><div><label className="label">Type</label><select className="input" value={newCoupon.discount_type} onChange={e => setNewCoupon({...newCoupon, discount_type: e.target.value as any})}><option value="percent">% Percent</option><option value="fixed">₹ Flat</option></select></div><div><label className="label">Value</label><input type="number" className="input" required value={newCoupon.discount_value} onChange={e => setNewCoupon({...newCoupon, discount_value: Number(e.target.value)})} /></div></div>
-                            <button className="btn-primary w-full">Create Coupon</button>
-                        </form>
                     </div>
                 </div>
             </div>
         )}
 
-        {/* SERVICES */}
-        {activeTab === "services" && (
-          <div className="flex flex-col md:flex-row w-full h-full overflow-hidden">
-            <div className="w-full md:w-64 bg-white border-b md:border-b-0 md:border-r h-48 md:h-full overflow-y-auto shrink-0">
-              <button onClick={handleAddNewService} className="m-4 py-3 bg-black text-white font-bold rounded-lg hover:bg-zinc-800 transition-colors w-[calc(100%-2rem)]">+ Add New</button>
-              <div className="pb-4">{services.map(s => (<button key={s.id} onClick={() => handleSelectService(s)} className={`w-full p-4 text-left border-l-4 transition-all hover:bg-gray-50 flex justify-between items-center ${selectedService?.id === s.id ? "border-black bg-zinc-50 font-bold" : "border-transparent"} ${!s.is_active ? "opacity-50" : ""}`}><span>{s.title}</span><span className="text-[10px] bg-gray-100 px-1 rounded">{s.type === 'combo' ? '🧩' : ''}</span></button>))}</div>
-            </div>
-            <div className="flex-1 bg-zinc-50 p-4 md:p-8 overflow-y-auto">
-              {selectedService ? (
-                <div className="max-w-4xl mx-auto bg-white p-4 md:p-8 rounded-xl shadow-sm border mb-20 md:mb-0">
-                  <div className="flex flex-col md:flex-row justify-between items-start mb-6 md:mb-8 border-b pb-6 gap-4"><h2 className="text-xl md:text-2xl font-bold">Edit {selectedService.title}</h2><div className="flex gap-3 w-full md:w-auto"><button type="button" onClick={handleToggleActive} className={`flex-1 md:flex-none px-4 py-2 rounded text-xs font-bold border transition-colors ${formService.is_active ? "bg-green-100 text-green-700 border-green-200" : "bg-gray-100 text-gray-500 border-gray-200"}`}>{formService.is_active ? "● ACTIVE" : "○ HIDDEN"}</button><button type="button" onClick={handleDeleteService} className="flex-1 md:flex-none px-4 py-2 bg-red-50 text-red-600 border border-red-100 rounded text-xs font-bold">DELETE</button></div></div>
-                  <form onSubmit={handleSaveService} className="space-y-6">
-                    <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 flex items-center gap-4"><label className="label text-blue-800">Service Type:</label><select className="input w-auto font-bold" value={formService.type || 'single'} onChange={e => setFormService({...formService, type: e.target.value})}><option value="single">Single Service</option><option value="combo">🧩 Combo Package</option></select></div>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-b pb-6 mb-6">
-                        <div className="space-y-2"><label className="label">1. Home</label><div className="relative aspect-video bg-gray-100 rounded overflow-hidden group border">{homePreview && <Image src={homePreview} alt="" fill className="object-cover" unoptimized />}<label className="absolute inset-0 bg-black/50 flex items-center justify-center text-white cursor-pointer text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity"><input type="file" className="hidden" onChange={e => e.target.files?.[0] && (setHomeFile(e.target.files[0]), setHomePreview(URL.createObjectURL(e.target.files[0])))} />Change</label></div></div>
-                        <div className="space-y-2"><label className="label">2. Booking</label><div className="relative aspect-[4/5] bg-gray-100 rounded overflow-hidden group border w-32 mx-auto">{bookingPreview && <Image src={bookingPreview} alt="" fill className="object-cover" unoptimized />}<label className="absolute inset-0 bg-black/50 flex items-center justify-center text-white cursor-pointer text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity"><input type="file" className="hidden" onChange={e => e.target.files?.[0] && (setBookingFile(e.target.files[0]), setBookingPreview(URL.createObjectURL(e.target.files[0])))} />Change</label></div></div>
-                        <div className="space-y-2"><label className="label">3. Detail</label><div className="relative aspect-[21/9] bg-gray-100 rounded overflow-hidden group border">{detailPreview && <Image src={detailPreview} alt="" fill className="object-cover" unoptimized />}<label className="absolute inset-0 bg-black/50 flex items-center justify-center text-white cursor-pointer text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity"><input type="file" className="hidden" onChange={e => e.target.files?.[0] && (setDetailFile(e.target.files[0]), setDetailPreview(URL.createObjectURL(e.target.files[0])))} />Change</label></div></div>
+        {/* TAB 6: COUPONS (High-Fidelity) */}
+        {activeTab === "coupons" && (
+            <div className="w-full h-full overflow-y-auto bg-slate-50/50 p-6 md:p-10">
+                <div className="max-w-5xl mx-auto">
+                    <div className="flex justify-between items-end mb-10">
+                        <div>
+                            <h2 className="font-black text-4xl tracking-tighter text-slate-900 uppercase leading-none">Coupons</h2>
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mt-2">Discount Logic & Codes</p>
+                        </div>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4"><div><label className="label">Title</label><input className="input" value={formService.title} onChange={e => setFormService({...formService, title: e.target.value})} /></div><div><label className="label">Badge</label><input className="input" value={formService.badge || ""} onChange={e => setFormService({...formService, badge: e.target.value})} /></div><div className="bg-green-50 p-1 rounded"><label className="label text-green-700">Capacity</label><input type="number" className="input border-green-200" value={formService.capacity || 1} onChange={e => setFormService({...formService, capacity: Number(e.target.value)})} /></div></div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-blue-50 p-6 rounded-lg border border-blue-100"><div className="space-y-2"><h4 className="font-bold text-xs text-blue-700 uppercase">60 Min Pricing</h4><div className="flex gap-2"><input type="number" placeholder="Current" className="input" value={formService.price} onChange={e => setFormService({...formService, price: Number(e.target.value)})} /><input type="number" placeholder="Old" className="input" value={formService.previous_price || 0} onChange={e => setFormService({...formService, previous_price: Number(e.target.value)})} /></div></div><div className="space-y-2"><h4 className="font-bold text-xs text-cyan-700 uppercase">30 Min Pricing</h4><div className="flex gap-2"><input type="number" placeholder="Current" className="input" value={formService.price_30 || 0} onChange={e => setFormService({...formService, price_30: Number(e.target.value)})} /><input type="number" placeholder="Old" className="input" value={formService.previous_price_30 || 0} onChange={e => setFormService({...formService, previous_price_30: Number(e.target.value)})} /></div></div></div>
-                    <div><label className="label">Short Desc</label><textarea className="input" rows={2} value={formService.description} onChange={e => setFormService({...formService, description: e.target.value})} /></div>
-                    <div><label className="label">Protocol</label><textarea className="input font-mono text-sm" rows={6} value={formService.long_description || ""} onChange={e => setFormService({...formService, long_description: e.target.value})} /></div>
-                    <div><label className="label">Benefits</label><textarea className="input font-mono text-sm" rows={5} value={benefitsInput} onChange={e => setBenefitsInput(e.target.value)} /></div>
-                    <button disabled={loading} className="btn-primary w-full py-4 text-lg">{loading ? "Saving..." : "Save Changes"}</button>
-                  </form>
-                </div>
-              ) : <div className="h-full flex flex-col items-center justify-center text-gray-400 py-12"><p>Select a service to edit</p></div>}
-            </div>
-          </div>
-        )}
 
-        {/* EVENTS */}
-        {activeTab === "events" && (
-            <div className="w-full p-4 md:p-8 overflow-y-auto">
-                <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8">
-                    <div className="md:col-span-2 space-y-4">
-                        {events.map(e => (
-                            <div key={e.id} className="bg-white p-4 rounded shadow-sm border flex gap-4">
-                                <div className="w-24 h-24 bg-gray-100 rounded-lg relative overflow-hidden shrink-0"><Image src={e.cover_image_url || "https://placehold.co/100"} alt="" fill className="object-cover" unoptimized /></div>
-                                <div className="flex-1">
-                                    <div className="flex justify-between items-start">
-                                        <h3 className="font-bold text-lg">{e.title}</h3>
-                                        <button onClick={() => handleDeleteEvent(e.id)} className="text-red-500 text-xs font-bold border px-2 py-1 rounded hover:bg-red-50">DEL</button>
-                                    </div>
-                                    <p className="text-xs text-gray-500 font-bold uppercase mb-2">{e.event_date}</p>
-                                    <p className="text-sm text-gray-600 line-clamp-2">{e.description}</p>
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        {/* LEFT: CREATOR */}
+                        <form onSubmit={handleAddCoupon} className="bg-white p-8 rounded-[2.5rem] shadow-xl border border-slate-100 space-y-6 h-fit">
+                            <div className="p-4 bg-yellow-50 rounded-2xl border border-yellow-100 flex items-center gap-3">
+                                <span className="text-2xl">🎟️</span>
+                                <div>
+                                    <p className="text-[10px] font-black uppercase text-yellow-600 tracking-widest">Generator</p>
+                                    <p className="text-xs font-bold text-yellow-800">Create new promo codes here.</p>
                                 </div>
                             </div>
-                        ))}
-                    </div>
-                    <div className="bg-white p-6 rounded shadow border h-fit sticky top-4">
-                        <h2 className="font-bold mb-4">Add Event</h2>
-                        <form onSubmit={handleAddEvent} className="space-y-4">
-                            <input className="input" placeholder="Event Title" required value={newEvent.title} onChange={e => setNewEvent({...newEvent, title: e.target.value})} />
-                            <div><label className="label">Date</label><input type="date" className="input" required value={newEvent.event_date} onChange={e => setNewEvent({...newEvent, event_date: e.target.value})} /></div>
-                            <textarea className="input" placeholder="Description" rows={3} required value={newEvent.description} onChange={e => setNewEvent({...newEvent, description: e.target.value})} />
-                            <div><label className="label">Cover Image</label><input type="file" onChange={e => e.target.files?.[0] && setEventFile(e.target.files[0])} className="text-sm w-full" /></div>
-                            <button disabled={loading} className="btn-primary w-full">{loading ? "Uploading..." : "Publish Event"}</button>
-                        </form>
-                    </div>
-                </div>
-            </div>
-        )}
 
-        {/* FOUNDER */}
-        {activeTab === "founder" && (
-            <div className="w-full p-4 md:p-8 overflow-y-auto">
-                <div className="max-w-4xl mx-auto bg-white p-8 rounded-xl shadow-sm border">
-                    <h2 className="font-bold text-xl mb-6">Edit Founder Profile</h2>
-                    {founderProfile ? (
-                        <form onSubmit={handleSaveFounder} className="space-y-6">
-                            <div className="flex flex-col md:flex-row gap-6">
-                                <div className="w-full md:w-1/3">
-                                    <label className="label">Profile Photo</label>
-                                    <div className="relative aspect-[3/4] bg-gray-100 rounded-lg overflow-hidden border mb-2 group">
-                                        {founderPreview ? <Image src={founderPreview} alt="" fill className="object-cover" unoptimized /> : <div className="flex items-center justify-center h-full text-gray-400">No Image</div>}
-                                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                            <label className="cursor-pointer text-white text-xs font-bold border border-white px-3 py-1 rounded hover:bg-white hover:text-black">
-                                                Change
-                                                <input type="file" className="hidden" onChange={e => { if(e.target.files?.[0]) { setFounderFile(e.target.files[0]); setFounderPreview(URL.createObjectURL(e.target.files[0])); }}} />
-                                            </label>
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="text-[10px] font-black uppercase text-slate-400 ml-3 tracking-widest">Code</label>
+                                    <input placeholder="e.g. SUMMER20" className="w-full p-4 bg-slate-50 rounded-2xl text-lg font-mono font-black uppercase text-slate-900 outline-none focus:ring-2 focus:ring-black" value={newCoupon.code} onChange={e => setNewCoupon({...newCoupon, code: e.target.value.toUpperCase()})} />
+                                </div>
+                                
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="text-[10px] font-black uppercase text-slate-400 ml-3 tracking-widest">Value</label>
+                                        <input type="number" className="w-full p-4 bg-slate-50 rounded-2xl font-bold outline-none" value={newCoupon.discount_value} onChange={e => setNewCoupon({...newCoupon, discount_value: Number(e.target.value)})} />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-black uppercase text-slate-400 ml-3 tracking-widest">Type</label>
+                                        <select className="w-full p-4 bg-slate-50 rounded-2xl font-bold outline-none appearance-none" value={newCoupon.type} onChange={e => setNewCoupon({...newCoupon, type: e.target.value as any})}>
+                                            <option value="percent">% Off</option>
+                                            <option value="flat">₹ Flat</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <button className="w-full py-4 bg-black text-white font-black rounded-2xl uppercase text-xs tracking-widest shadow-lg hover:scale-[1.02] transition-transform">
+                                    Issue Coupon
+                                </button>
+                            </div>
+                        </form>
+
+                        {/* RIGHT: ACTIVE TICKETS */}
+                        <div className="lg:col-span-2 space-y-4">
+                            {coupons.map(c => (
+                                <div key={c.id} className="relative bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden flex flex-col md:flex-row items-center md:items-stretch group">
+                                    {/* Left Stub */}
+                                    <div className="bg-slate-900 text-white p-6 md:w-32 flex flex-col items-center justify-center text-center relative">
+                                        <div className="absolute -right-2 top-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full"></div>
+                                        <span className="text-2xl mb-1">🏷️</span>
+                                        <span className="text-[10px] font-black uppercase tracking-widest opacity-50">Active</span>
+                                    </div>
+                                    
+                                    {/* Content */}
+                                    <div className="flex-1 p-6 flex flex-col md:flex-row justify-between items-center gap-4 w-full">
+                                        <div className="text-center md:text-left">
+                                            <p className="font-mono text-3xl font-black text-slate-900 tracking-tighter uppercase">{c.code}</p>
+                                            <p className="text-xs font-bold text-green-600 bg-green-50 px-2 py-1 rounded-md inline-block mt-1">
+                                                {c.type === 'percent' ? `${c.discount_value}% Discount` : `₹${c.discount_value} Flat Off`}
+                                            </p>
                                         </div>
+                                        
+                                        <button 
+                                            onClick={() => deleteCoupon(c.id)} 
+                                            className="px-6 py-3 bg-red-50 text-red-500 font-bold rounded-xl text-xs uppercase hover:bg-red-500 hover:text-white transition-all w-full md:w-auto"
+                                        >
+                                            Revoke
+                                        </button>
                                     </div>
                                 </div>
-                                <div className="w-full md:w-2/3 space-y-4">
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div><label className="label">Name</label><input className="input" value={founderProfile.name} onChange={e => setFounderProfile({...founderProfile, name: e.target.value})} /></div>
-                                        <div><label className="label">Role</label><input className="input" value={founderProfile.role} onChange={e => setFounderProfile({...founderProfile, role: e.target.value})} /></div>
-                                    </div>
-                                    <div><label className="label">Quote</label><textarea className="input" rows={2} value={founderProfile.quote} onChange={e => setFounderProfile({...founderProfile, quote: e.target.value})} /></div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div><label className="label">Value 1 (Desc)</label><input className="input" value={founderProfile.value_1_desc} onChange={e => setFounderProfile({...founderProfile, value_1_desc: e.target.value})} /></div>
-                                        <div><label className="label">Value 2 (Desc)</label><input className="input" value={founderProfile.value_2_desc} onChange={e => setFounderProfile({...founderProfile, value_2_desc: e.target.value})} /></div>
-                                    </div>
+                            ))}
+                            {coupons.length === 0 && (
+                                <div className="text-center p-12 text-slate-300 border-2 border-dashed border-slate-200 rounded-[2rem]">
+                                    <span className="text-xs font-black uppercase tracking-widest">No active coupons</span>
                                 </div>
-                            </div>
-                            <div><label className="label">Story</label><textarea className="input font-mono text-sm leading-6" rows={8} value={founderProfile.story} onChange={e => setFounderProfile({...founderProfile, story: e.target.value})} /></div>
-                            <div><label className="label">Mission</label><textarea className="input font-mono text-sm" rows={4} value={founderProfile.mission} onChange={e => setFounderProfile({...founderProfile, mission: e.target.value})} /></div>
-                            <button disabled={loading} className="btn-primary w-full py-4 text-lg">{loading ? "Saving Profile..." : "Update Founder Page"}</button>
-                        </form>
-                    ) : <p>Loading profile...</p>}
+                            )}
+                        </div>
+                    </div>
                 </div>
             </div>
         )}
 
-        {/* GALLERY */}
-        {activeTab === "gallery" && (
-           <div className="w-full p-4 md:p-8 overflow-y-auto">
-             <div className="max-w-5xl mx-auto">
-               <div className="bg-white p-6 rounded-xl border shadow-sm mb-8">
-                   <h2 className="font-bold mb-4">Upload Photo</h2>
-                   <div className="flex flex-col md:flex-row gap-4 items-end">
-                       <div className="flex-1 w-full"><label className="label">Select Image</label><input type="file" onChange={e => e.target.files?.[0] && setGalleryFile(e.target.files[0])} className="w-full" /></div>
-                       <div className="w-full md:w-48"><label className="label">Category</label><select className="input" value={galleryCategory} onChange={e => setGalleryCategory(e.target.value)}><option value="general">General</option><option value="session">Ice Bath Session</option><option value="community">Community</option><option value="workshop">Workshop</option><option value="bts">Behind Scenes</option></select></div>
-                       <button onClick={handleUploadGallery} className="btn-primary px-8 w-full md:w-auto">Upload</button>
-                   </div>
-               </div>
-               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                 {galleryImages.map(img => (
-                    <div key={img.id} className="relative aspect-square bg-gray-100 rounded-lg overflow-hidden group">
-                        <Image src={img.image_url} alt="" fill className="object-cover" unoptimized />
-                        <div className="absolute top-2 right-2"><span className="text-[10px] font-bold bg-black/50 text-white px-2 py-1 rounded backdrop-blur-sm uppercase">{img.category || 'gen'}</span></div>
-                        <button onClick={() => handleDeleteGallery(img.id)} className="absolute inset-0 bg-red-500/80 text-white opacity-0 group-hover:opacity-100 font-bold">DELETE</button>
-                    </div>
-                 ))}
-               </div>
-             </div>
-           </div>
-        )}
-
-        {/* SCHEDULE */}
-        {activeTab === "schedule" && (
-           <div className="w-full p-4 md:p-8 overflow-y-auto">
-             <div className="max-w-4xl mx-auto bg-white p-4 md:p-8 rounded-xl shadow-sm border">
-               <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 border-b pb-6 gap-4">
-                  <div><h2 className="font-bold text-xl md:text-2xl">Schedule Manager</h2><p className="text-zinc-500 text-sm">Define availability.</p></div>
-                  <div className="w-full md:w-auto"><span className="text-xs font-bold uppercase text-gray-400 block mb-1">Editing:</span><select className="p-3 border-2 border-black rounded-lg text-sm font-bold bg-white w-full md:w-[200px]" value={scheduleScope} onChange={e => setScheduleScope(e.target.value === 'global' ? 'global' : Number(e.target.value))}><option value="global">GLOBAL DEFAULTS</option>{services.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}</select></div>
-               </div>
-               <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
-                   <div className="md:col-span-1 bg-zinc-50 p-6 rounded-xl border">
-                       <h3 className="font-bold text-sm uppercase mb-4 text-zinc-400">Generator</h3>
-                       <div className="space-y-4">
-                           <div><label className="label">Start</label><input type="time" className="input" value={genStart} onChange={e => setGenStart(e.target.value)} /></div>
-                           <div><label className="label">End</label><input type="time" className="input" value={genEnd} onChange={e => setGenEnd(e.target.value)} /></div>
-                           <div><label className="label">Interval</label><select className="input" value={genInterval} onChange={e => setGenInterval(Number(e.target.value))}><option value="60">60 Mins</option><option value="30">30 Mins</option></select></div>
-                           <button onClick={runGenerator} className="btn-primary w-full bg-blue-600 text-sm">Generate</button>
-                       </div>
-                   </div>
-                   <div className="md:col-span-2">
-                       <div className="flex gap-2 mb-4 bg-gray-100 p-1 rounded-lg w-fit">{["weekday", "weekend"].map((t: any) => (<button key={t} onClick={() => setActiveDayType(t)} className={`px-4 py-1.5 rounded-md text-xs font-bold uppercase transition-all ${activeDayType === t ? "bg-white shadow text-black" : "text-gray-500 hover:text-black"}`}>{t}s</button>))}</div>
-                       <div className="bg-white border rounded-xl p-4 md:p-6 min-h-[300px]">{currentSlots.length === 0 ? (<div className="h-full flex flex-col items-center justify-center text-gray-300"><p>No slots set.</p></div>) : (<div className="flex flex-wrap gap-2">{currentSlots.map(slot => (<button key={slot} onClick={() => removeSlot(slot)} className="px-3 py-1.5 bg-zinc-100 hover:bg-red-100 hover:text-red-600 rounded-lg text-sm font-mono border transition-colors flex items-center gap-2 group">{slot} <span className="text-gray-300 group-hover:text-red-400">×</span></button>))}<button onClick={addSingleSlot} className="px-3 py-1.5 border-dashed border-2 border-gray-200 rounded-lg text-sm text-gray-400 hover:border-black hover:text-black transition-colors">+ Add</button></div>)}</div>
-                       <div className="mt-4 flex justify-end"><button onClick={saveCurrentSlots} className="btn-primary w-full md:w-auto px-8 bg-green-600 hover:bg-green-500">Save Schedule</button></div>
-                   </div>
-               </div>
-               <div className="border-t pt-8">
-                   <h3 className="font-bold text-lg mb-4">Exceptions</h3>
-                   <div className="flex flex-col md:flex-row gap-4 items-end mb-6 bg-yellow-50 p-4 rounded-xl border border-yellow-100">
-                       <div className="w-full md:flex-1"><label className="label">Date</label><input type="date" className="input" value={newDate} onChange={e => setNewDate(e.target.value)} /></div>
-                       <div className="w-full md:w-auto flex items-center h-10"><label className="flex items-center gap-2 font-bold text-sm text-yellow-900 cursor-pointer"><input type="checkbox" checked={isClosed} onChange={e => setIsClosed(e.target.checked)} className="w-5 h-5" /> Mark CLOSED</label></div>
-                       <button onClick={handleAddException} className="btn-primary w-full md:w-auto bg-yellow-600 border-none h-10 px-6">Add</button>
-                   </div>
-                   <div className="space-y-2">{schedules.filter(s => s.service_id === (scheduleScope==='global'?null:scheduleScope) && s.type === 'custom').map(s => (<div key={s.id} className="flex justify-between items-center p-3 border rounded bg-white"><div className="flex items-center gap-4"><span className="font-mono font-bold text-yellow-700 bg-yellow-50 px-2 py-1 rounded text-xs md:text-sm">{s.date}</span><span className="text-xs text-gray-600">{s.is_closed ? "⛔ CLOSED" : `${s.slots.length} Slots`}</span></div><button onClick={() => handleDeleteRule(s.id)} className="text-red-500 text-xs font-bold hover:underline">Delete</button></div>))}</div>
-               </div>
-             </div>
-           </div>
-        )}
-
-        {/* CONTENT */}
-        {activeTab === "content" && (
-           <div className="flex flex-col md:flex-row w-full h-full overflow-hidden">
-               <div className="w-full md:w-64 bg-white border-b md:border-b-0 md:border-r h-48 md:h-full overflow-y-auto shrink-0">
-                  <button onClick={handleAddContent} className="m-4 py-3 bg-black text-white font-bold rounded-lg hover:bg-zinc-800 transition-colors w-[calc(100%-2rem)]">+ Add New Section</button>
-                  <div className="pb-4">
-                      {contentBlocks.map(c => (
-                          <button key={c.id} onClick={() => setSelectedContent(c)} className={`w-full p-4 text-left border-l-4 transition-all hover:bg-gray-50 ${selectedContent?.id === c.id ? "border-black bg-zinc-50 font-bold" : "border-transparent"}`}>
-                              <span className="block text-sm">{c.slug}</span><span className="text-xs text-gray-400 truncate block">{c.title}</span>
-                          </button>
-                      ))}
-                  </div>
-               </div>
-               <div className="flex-1 bg-zinc-50 p-4 md:p-8 overflow-y-auto">
-                   {selectedContent ? (
-                       <div className="max-w-4xl mx-auto bg-white p-6 rounded-xl shadow-sm border">
-                           <div className="flex justify-between items-center mb-6"><h2 className="text-xl font-bold">Edit Content</h2><button onClick={handleDeleteContent} className="px-4 py-2 bg-red-50 text-red-600 border border-red-100 rounded text-xs font-bold hover:bg-red-100">DELETE</button></div>
-                           <form onSubmit={handleSaveContent} className="space-y-6">
-                               <div className="grid grid-cols-2 gap-4"><div><label className="label">Slug (ID)</label><input className="input font-mono text-blue-600" value={selectedContent.slug} onChange={e => setSelectedContent({...selectedContent, slug: e.target.value})} /></div><div><label className="label">Title</label><input className="input" value={selectedContent.title} onChange={e => setSelectedContent({...selectedContent, title: e.target.value})} /></div></div>
-                               <div><label className="label">Content (Body)</label><textarea className="input font-mono text-sm leading-6" rows={12} value={selectedContent.content} onChange={e => setSelectedContent({...selectedContent, content: e.target.value})} /></div>
-                               <button className="btn-primary w-full py-4 text-lg" disabled={loading}>{loading ? "Saving..." : "Update Content"}</button>
-                           </form>
-                       </div>
-                   ) : <div className="h-full flex items-center justify-center text-gray-400"><p>Select a content block to edit.</p></div>}
-               </div>
-           </div>
-        )}
-
-        {/* TESTIMONIALS */}
-        {activeTab === "testimonials" && (
-           <div className="w-full p-4 md:p-8 overflow-y-auto">
-             <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8">
-               <div className="space-y-4">
-                 {testimonials.map(t => (
-                   <div key={t.id} className={`bg-white p-4 rounded shadow-sm border relative group transition-all ${!t.is_active ? 'opacity-50 grayscale' : ''}`}>
-                     <div className="flex justify-between items-start mb-2">
-                         <div><p className="text-sm font-bold text-black">{t.name} <span className="text-xs font-normal text-gray-500 ml-1">({t.role})</span></p><div className="flex text-yellow-400 text-xs">{"★".repeat(t.rating)}</div></div>
-                         <div className="flex gap-2"><button onClick={() => toggleTestimonialVisibility(t)} className="text-xs font-bold px-2 py-1 border rounded hover:bg-gray-50">{t.is_active ? "Hide" : "Show"}</button><button onClick={() => handleDeleteTestimonial(t.id)} className="text-xs font-bold text-red-500 px-2 py-1 border border-red-100 rounded hover:bg-red-50">Del</button></div>
-                     </div>
-                     <p className="text-sm italic text-gray-600">"{t.message}"</p>
-                     {t.video_url && (<div className="mt-2 text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded inline-block truncate max-w-full">🎥 {t.video_url}</div>)}
-                   </div>
-                 ))}
-               </div>
-               <div className="bg-white p-6 rounded shadow border h-fit sticky top-4">
-                 <h2 className="font-bold mb-4">Add Testimonial</h2>
-                 <form onSubmit={handleAddTestimonial} className="space-y-3">
-                   <input className="input" placeholder="Name" required value={newTestimonial.name} onChange={e => setNewTestimonial({...newTestimonial, name: e.target.value})} />
-                   <input className="input" placeholder="Role (e.g. Athlete)" value={newTestimonial.role} onChange={e => setNewTestimonial({...newTestimonial, role: e.target.value})} />
-                   <div className="grid grid-cols-2 gap-2"><div><label className="label">Rating</label><select className="input" value={newTestimonial.rating} onChange={e => setNewTestimonial({...newTestimonial, rating: Number(e.target.value)})}>{[5,4,3,2,1].map(r => <option key={r} value={r}>{r} Stars</option>)}</select></div><div><label className="label">Active?</label><select className="input" value={newTestimonial.is_active ? "true" : "false"} onChange={e => setNewTestimonial({...newTestimonial, is_active: e.target.value === "true"})}><option value="true">Visible</option><option value="false">Hidden</option></select></div></div>
-                   <textarea className="input" placeholder="Message / Review" required rows={3} value={newTestimonial.message} onChange={e => setNewTestimonial({...newTestimonial, message: e.target.value})} />
-                   <div className="pt-2 border-t"><label className="label">Video URL (Optional)</label><input className="input" placeholder="YouTube / Vimeo Link" value={newTestimonial.video_url} onChange={e => setNewTestimonial({...newTestimonial, video_url: e.target.value})} /></div>
-                   <button className="btn-primary w-full">Add to Wall</button>
-                 </form>
-               </div>
-             </div>
-           </div>
-        )}
-
-        {/* SETTINGS */}
+{/* TAB 7: SETTINGS (UPDATED WITH UPI CONTROLS) */}
         {activeTab === "settings" && (
-           <div className="w-full p-4 md:p-8 overflow-y-auto">
-             <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8">
-               <div className="bg-white p-6 md:p-8 rounded-xl shadow-sm border">
-                 <h2 className="font-bold text-lg mb-6">Contact</h2>
-                 <form onSubmit={handleSaveContact} className="space-y-4">
-                   <div><label className="label">Email</label><input className="input" value={contactInfo.email} onChange={e => setContactInfo({...contactInfo, email: e.target.value})} /></div>
-                   <div><label className="label">Phone</label><input className="input" value={contactInfo.phone} onChange={e => setContactInfo({...contactInfo, phone: e.target.value})} /></div>
-                   <div><label className="label">Address</label><textarea className="input" rows={3} value={contactInfo.address} onChange={e => setContactInfo({...contactInfo, address: e.target.value})} /></div>
-                   <button className="btn-primary w-full">Save</button>
-                 </form>
+           <div className="w-full h-full overflow-y-auto bg-slate-50/50 p-6 md:p-10">
+               <h2 className="font-black text-4xl tracking-tighter text-slate-900 mb-6">SETTINGS</h2>
+               <div className="max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-8">
+                   
+                   {/* 1. PUBLIC CONTACT INFO */}
+                   <form onSubmit={handleSaveSettings} className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 space-y-6 h-fit">
+                       <h3 className="font-bold text-lg mb-2">Public Contact & Payment</h3>
+                       
+                       {/* Basic Info */}
+                       <div className="space-y-4">
+                           <div>
+                               <label className="text-xs font-bold uppercase text-slate-400 mb-1 block">Phone Display</label>
+                               <input className="w-full p-3 bg-slate-50 rounded-xl font-bold text-sm" value={settings.contact_phone || ""} onChange={e => setSettings({...settings, contact_phone: e.target.value})} placeholder="+91 00000 00000" />
+                           </div>
+                           <div>
+                               <label className="text-xs font-bold uppercase text-slate-400 mb-1 block">Email Display</label>
+                               <input className="w-full p-3 bg-slate-50 rounded-xl font-bold text-sm" value={settings.contact_email || ""} onChange={e => setSettings({...settings, contact_email: e.target.value})} placeholder="contact@example.com" />
+                           </div>
+                           <div>
+                               <label className="text-xs font-bold uppercase text-slate-400 mb-1 block">Physical Address</label>
+                               <textarea className="w-full p-3 bg-slate-50 rounded-xl font-bold text-sm min-h-[80px]" rows={3} value={settings.contact_address || ""} onChange={e => setSettings({...settings, contact_address: e.target.value})} placeholder="Shop No, Street, City..." />
+                           </div>
+{/* SMART MAP INPUT (Auto-Extracts URL from iFrame) */}
+                           <div>
+                               <label className="text-xs font-bold uppercase text-slate-400 mb-1 block">Google Map Embed URL</label>
+                               <input 
+                                   className="w-full p-3 bg-slate-50 rounded-xl font-bold text-sm text-slate-600 focus:text-slate-900 transition-colors" 
+                                   value={settings.map_url || ""} 
+                                   onChange={e => {
+                                       let val = e.target.value;
+                                       // 🔒 INTELLIGENT PARSER:
+                                       // If user pastes the full <iframe src="..."> code, extract ONLY the URL.
+                                       if (val.includes('<iframe') && val.includes('src="')) {
+                                           const srcMatch = val.match(/src="([^"]+)"/);
+                                           if (srcMatch && srcMatch[1]) {
+                                               val = srcMatch[1]; // Keep only the URL
+                                           }
+                                       }
+                                       setSettings({...settings, map_url: val});
+                                   }} 
+                                   placeholder="Paste the full <iframe...> code here, we'll fix it automatically." 
+                               />
+                               <p className="text-[10px] text-slate-400 mt-1 font-medium">
+                               </p>
+                           </div>
+                       </div>
+
+                       <hr className="border-slate-100 my-6"/>
+
+                       {/* 🔒 NEW: UPI & QR CONTROL CENTER */}
+                       <div className="grid grid-cols-1 gap-4">
+                           {/* UPI ID Input */}
+                           <div>
+                               <label className="text-xs font-bold uppercase text-slate-400 mb-1 block">UPI ID (VPA)</label>
+                               <div className="relative">
+                                   <input 
+                                       className="w-full pl-10 p-3 bg-blue-50/50 rounded-xl font-bold font-mono text-sm border border-blue-100 focus:ring-2 focus:ring-blue-500 outline-none" 
+                                       value={settings.upi_id || ""} 
+                                       onChange={e => setSettings({...settings, upi_id: e.target.value})} 
+                                       placeholder="business@oksbi" 
+                                   />
+                                   <span className="absolute left-3 top-3 text-lg">⚡</span>
+                               </div>
+                           </div>
+
+                           {/* QR Code Uploader */}
+                           <div>
+                               <label className="text-xs font-bold uppercase text-slate-400 mb-1 block">Payment QR Code</label>
+                               <div className="flex items-center gap-4 bg-slate-50 p-3 rounded-2xl border border-slate-100">
+                                   {/* Preview Thumbnail */}
+                                   <div className="w-16 h-16 bg-white rounded-xl border border-slate-200 flex items-center justify-center overflow-hidden shrink-0 shadow-sm relative">
+                                       {settings.upi_qr ? (
+                                          <img src={settings.upi_qr} alt="QR" className="w-full h-full object-cover" />
+                                       ) : (
+                                          <span className="text-[9px] font-black text-slate-300">NO QR</span>
+                                       )}
+                                   </div>
+                                   
+                                   {/* Actions */}
+                                   <div className="flex-1">
+                                       <label className={`block w-full py-3 text-center rounded-xl border-2 border-dashed font-bold text-xs uppercase cursor-pointer transition-all ${uploadingQr ? "bg-slate-100 border-slate-300 text-slate-400" : "border-blue-200 text-blue-600 hover:bg-blue-50 hover:border-blue-300"}`}>
+                                           {uploadingQr ? "Uploading..." : "Upload New QR Image"}
+                                           <input 
+                                               type="file" 
+                                               accept="image/*" 
+                                               className="hidden" 
+                                               onChange={handleQrUpload} 
+                                               disabled={uploadingQr}
+                                           />
+                                       </label>
+                                   </div>
+                               </div>
+                           </div>
+                       </div>
+
+                       <button className="w-full py-4 bg-black text-white font-bold rounded-xl uppercase tracking-widest hover:bg-zinc-800 shadow-lg mt-4">
+                           Save Information
+                       </button>
+                   </form>
+
+                   {/* 2. NOTIFICATION CONFIGURATION */}
+                   <form onSubmit={handleSaveSettings} className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 space-y-6 h-fit">
+                       <div className="flex items-center gap-3 mb-2">
+                           <div className="w-2 h-8 bg-blue-600 rounded-full"></div>
+                           <h3 className="font-black text-2xl tracking-tighter uppercase">Notifications</h3>
+                       </div>
+                       
+                       <div className="space-y-4">
+                           {/* Toggle: Email */}
+                           <div className="flex items-center justify-between p-5 bg-slate-50 rounded-2xl border border-transparent hover:border-blue-100 transition-all">
+                               <div>
+                                   <span className="font-bold text-slate-900 block">Email Prompts</span>
+                                   <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Trigger local mail client</span>
+                               </div>
+                               <label className="relative inline-flex items-center cursor-pointer">
+                                   <input 
+                                       type="checkbox" 
+                                       className="sr-only peer"
+                                       checked={settings.notify_email_enabled !== 'false'} 
+                                       onChange={e => setSettings({...settings, notify_email_enabled: e.target.checked ? 'true' : 'false'})} 
+                                   />
+                                   <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-black"></div>
+                               </label>
+                           </div>
+
+                           {/* Toggle: SMS */}
+                           <div className="flex items-center justify-between p-5 bg-slate-50 rounded-2xl border border-transparent hover:border-blue-100 transition-all">
+                               <div>
+                                   <span className="font-bold text-slate-900 block">SMS Prompts</span>
+                                   <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Trigger native OS messaging</span>
+                               </div>
+                               <label className="relative inline-flex items-center cursor-pointer">
+                                   <input 
+                                       type="checkbox" 
+                                       className="sr-only peer"
+                                       checked={settings.notify_sms_enabled !== 'false'} 
+                                       onChange={e => setSettings({...settings, notify_sms_enabled: e.target.checked ? 'true' : 'false'})} 
+                                   />
+                                   <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-black"></div>
+                               </label>
+                           </div>
+                       </div>
+
+                       <button className="w-full py-4 bg-blue-600 text-white font-black rounded-2xl uppercase tracking-tighter hover:bg-blue-700 shadow-xl shadow-blue-100 transition-transform active:scale-95">
+                           Save Configuration
+                       </button>
+                   </form>
+
                </div>
-               <div className="bg-white p-6 md:p-8 rounded-xl shadow-sm border text-center">
-                 <h2 className="font-bold text-lg mb-6">QR Code</h2>
-                 <div className="w-48 h-48 bg-gray-100 mx-auto relative border rounded mb-4">{qrPreview ? <Image src={qrPreview} alt="New" fill className="object-contain" unoptimized /> : <Image src={qrUrl || "https://placehold.co/200"} alt="Current" fill className="object-contain" unoptimized />}</div>
-                 <input type="file" onChange={e => { if(e.target.files?.[0]) { setQrFile(e.target.files[0]); setQrPreview(URL.createObjectURL(e.target.files[0])); }}} className="mb-4 text-sm w-full" />
-                 {qrFile && <button onClick={handleUpdateQR} className="btn-primary w-full">Save New QR</button>}
-               </div>
-             </div>
            </div>
         )}
 
       </main>
-      <style jsx>{` .input { width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 0.5rem; font-size: 0.875rem; } .label { display: block; font-size: 0.7rem; font-weight: 800; text-transform: uppercase; color: #6b7280; margin-bottom: 0.25rem; } .btn-primary { background: #000; color: #fff; font-weight: 700; padding: 0.75rem; border-radius: 0.5rem; } .btn-primary:hover { opacity: 0.8; } `}</style>
     </div>
   );
 }
