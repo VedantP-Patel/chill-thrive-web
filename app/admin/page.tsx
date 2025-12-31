@@ -14,7 +14,12 @@ type Booking = {
 };
 
 type ContactMessage = { 
-  id: number; name: string; phone: string; message: string; created_at: string; 
+  id: number; 
+  name: string; 
+  phone: string; 
+  email: string; // <--- This was missing!
+  message: string; 
+  created_at: string; 
 };
 
 // 🔒 NEW SUB-TYPE
