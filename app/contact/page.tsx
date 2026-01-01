@@ -2,19 +2,29 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, Variants } from "framer-motion"; // <--- Added 'Variants'
 
 // --- ANIMATION VARIANTS ---
-const container = {
+// Explicitly typed as 'Variants' to fix the build error
+const container: Variants = {
   hidden: { opacity: 0 },
   show: { opacity: 1, transition: { staggerChildren: 0.1 } }
 };
-const item = {
+
+const item: Variants = {
   hidden: { opacity: 0, y: 20 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.5, ease: "easeOut" } }
+  show: { 
+    opacity: 1, 
+    y: 0, 
+    transition: { 
+      duration: 0.5, 
+      ease: "easeOut" // TypeScript now knows this is a valid Easing type
+    } 
+  }
 };
 
 export default function ContactPage() {
+  // ... rest of your component code remains exactly the same ...
   // --- STATE ---
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<"idle" | "sending" | "success" | "error">("idle");

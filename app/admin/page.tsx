@@ -2,7 +2,29 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { useRouter } from "next/navigation";
+import { motion, AnimatePresence, Variants } from "framer-motion"; // <--- Added 'Variants'
+
+// --- ANIMATION VARIANTS ---
+// Explicitly typed as 'Variants' to fix the build error
+const container: Variants = {
+  hidden: { opacity: 0 },
+  show: { opacity: 1, transition: { staggerChildren: 0.1 } }
+};
+
+const item: Variants = {
+  hidden: { opacity: 0, y: 20 },
+  show: { 
+    opacity: 1, 
+    y: 0, 
+    transition: { 
+      duration: 0.5, 
+      ease: "easeOut" // TypeScript now knows this is a valid Easing type
+    } 
+  }
+};
+
+export default function ContactPage() {
+  // ... rest of your component code remains exactly the same ...
 
 // --- 1. TYPE DEFINITIONS ---
 type Booking = { 
