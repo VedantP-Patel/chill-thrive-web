@@ -2,29 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { motion, AnimatePresence, Variants } from "framer-motion"; // <--- Added 'Variants'
-
-// --- ANIMATION VARIANTS ---
-// Explicitly typed as 'Variants' to fix the build error
-const container: Variants = {
-  hidden: { opacity: 0 },
-  show: { opacity: 1, transition: { staggerChildren: 0.1 } }
-};
-
-const item: Variants = {
-  hidden: { opacity: 0, y: 20 },
-  show: { 
-    opacity: 1, 
-    y: 0, 
-    transition: { 
-      duration: 0.5, 
-      ease: "easeOut" // TypeScript now knows this is a valid Easing type
-    } 
-  }
-};
-
-export default function ContactPage() {
-  // ... rest of your component code remains exactly the same ...
+import { useRouter } from "next/navigation";
 
 // --- 1. TYPE DEFINITIONS ---
 type Booking = { 
@@ -53,7 +31,8 @@ type ServiceVariant = {
   active: boolean;     // Enable/Disable specific duration
 };
 
-// --- TYPES ---
+// ... existing types ...
+
 type Service = {
   id: number;
   title: string;
@@ -64,15 +43,16 @@ type Service = {
   booking_image_url?: string;
   price: number;
   previous_price?: number;
-  price_30?: number;           // Ensure these exist if used
-  previous_price_30?: number;  // Ensure these exist if used
+  price_30?: number;
+  previous_price_30?: number;
   capacity: number;
   is_active: boolean;
-  // ✅ NEW FIELDS ADDED HERE
   badge?: string;
   benefits?: string[];
   variants?: any[];
-};
+}; // <--- MAKE SURE THIS "};" IS HERE!
+
+// ...
 
 type Testimonial = { 
   id: number; name: string; role: string; message: string; rating: number; is_active: boolean; 
