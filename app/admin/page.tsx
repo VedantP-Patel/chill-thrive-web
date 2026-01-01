@@ -31,22 +31,25 @@ type ServiceVariant = {
   active: boolean;     // Enable/Disable specific duration
 };
 
-// 🔒 UPDATED SERVICE TYPE
-type Service = { 
-  id: number; 
-  title: string; 
-  description: string; 
-  is_active: boolean; 
-  type: "single" | "combo"; 
-  capacity: number; 
-  
-  // The Dynamic List
-  variants: ServiceVariant[]; 
-
-  // Visuals
-  image_url: string; 
-  detail_image_url?: string; 
+// --- TYPES ---
+type Service = {
+  id: number;
+  title: string;
+  description: string;
+  type: string;
+  image_url: string;
+  detail_image_url?: string;
   booking_image_url?: string;
+  price: number;
+  previous_price?: number;
+  price_30?: number;           // Ensure these exist if used
+  previous_price_30?: number;  // Ensure these exist if used
+  capacity: number;
+  is_active: boolean;
+  // ✅ NEW FIELDS ADDED HERE
+  badge?: string;
+  benefits?: string[];
+  variants?: any[];
 };
 
 type Testimonial = { 
