@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 const FALLBACK_IMG = "https://images.unsplash.com/photo-1600334089648-b0d9d3028eb2?q=80&w=1000";
 
-// --- TYPES (Synced with Admin V3.5) ---
+// --- TYPES ---
 type Variant = { id: string; duration: string; price: number; old_price?: number; active: boolean };
 type Service = { 
   id: number; title: string; description: string; type: string; 
@@ -55,12 +55,12 @@ function BookingContent() {
       // 1. Services & Variants
       const { data: s } = await supabase.from("services").select("*").eq("is_active", true).order("id");
       if (s) {
-          // Normalize variants if empty
+          // Normalize variants
           const cleaned = s.map((item: any) => ({
              ...item,
              variants: (item.variants && item.variants.length > 0) 
-                ? item.variants.filter((v:any) => v.active) // Only show active variants
-                : [{ id: 'default', duration: 'Standard', price: item.price, old_price: item.previous_price, active: true }] // Fallback for legacy data
+                ? item.variants.filter((v:any) => v.active) 
+                : [{ id: 'default', duration: 'Standard', price: item.price, old_price: item.previous_price, active: true }]
           }));
           
           setServices(cleaned);
@@ -89,18 +89,24 @@ function BookingContent() {
   // Helper: Select Service & Default Variant
   const handleServiceSelect = (s: Service) => {
       setSelectedService(s);
-      // Auto-select first available variant
       if (s.variants && s.variants.length > 0) {
           setSelectedVariant(s.variants[0]);
       }
-      setFormData(prev => ({ ...prev, time: "" })); // Reset time on service change
+      setFormData(prev => ({ ...prev, time: "" })); 
   };
 
-  // --- FILTERING ---
+  // --- SMART FILTERING (V4.0) ---
   const filteredServices = services.filter(s => {
       const term = searchTerm.toLowerCase().trim();
       const matchesSearch = !term || s.title.toLowerCase().includes(term) || s.description?.toLowerCase().includes(term);
-      const matchesType = filterType === "all" ? true : s.type === filterType;
+      
+      // Smart Type Filter: 'combo' catches both 'combo' and 'package'
+      const matchesType = filterType === "all" 
+        ? true 
+        : filterType === "combo" 
+            ? (s.type === "combo" || s.type === "package") 
+            : s.type === filterType;
+
       return matchesSearch && matchesType;
   });
 
@@ -128,7 +134,6 @@ function BookingContent() {
           const { data: schedules } = await supabase.from("schedules").select("*");
           if (!schedules) return;
 
-          // Hierarchy: Custom Date > Day Type
           let activeRule = schedules.find(s => s.type === 'custom' && s.date === formData.date);
           if (!activeRule) activeRule = schedules.find(s => s.type === dayType);
 
@@ -138,7 +143,6 @@ function BookingContent() {
 
           let rawSlots = activeRule.slots || [];
           
-          // Filter Past Times
           if (formData.date === todayStr) {
               const now = new Date();
               const currMins = now.getHours()*60 + now.getMinutes();
@@ -149,7 +153,6 @@ function BookingContent() {
               });
           }
 
-          // Filter Full Slots
           const { data: bookings } = await supabase.from("bookings").select("time").eq("booking_date", formData.date).eq("service_type", selectedService.title).neq("status", "cancelled");
           
           if (bookings) {
@@ -196,7 +199,7 @@ function BookingContent() {
     const { error } = await supabase.from("bookings").insert([{
       service_id: selectedService?.id, 
       service_type: selectedService?.title, 
-      duration: selectedVariant?.duration || "Standard", // Store the specific variant name
+      duration: selectedVariant?.duration || "Standard", 
       user_name: formData.name, 
       user_email: formData.email, 
       user_phone: formData.phone,
@@ -216,7 +219,6 @@ function BookingContent() {
     setLoading(false);
   };
 
-  // SUCCESS SCREEN
   if (success) return (
     <div className="min-h-screen flex items-center justify-center bg-zinc-50 p-6">
         <div className="bg-white p-8 md:p-12 rounded-[2rem] shadow-xl text-center max-w-md w-full border border-green-100 animate-fade-in-up">
@@ -232,7 +234,7 @@ function BookingContent() {
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans pt-20 pb-32 md:pb-20 px-4 md:px-8">
       <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8 h-full">
         
-        {/* --- LEFT: SEARCH & LIST --- */}
+        {/* --- LEFT: SEARCH & LIST (SMART V4.0) --- */}
         <div className="lg:col-span-7 flex flex-col h-full lg:h-[calc(100vh-8rem)]">
             
             {/* HEADER */}
@@ -263,7 +265,7 @@ function BookingContent() {
                                 onClick={()=>setFilterType(t as any)} 
                                 className={`px-4 h-full rounded-lg text-[10px] font-bold uppercase transition-all ${filterType===t?"bg-black text-white":"text-slate-500 hover:bg-slate-100"}`}
                             >
-                                {t}
+                                {t === 'combo' ? 'Combos' : t}
                             </button>
                         ))}
                     </div>
@@ -276,7 +278,7 @@ function BookingContent() {
                     <div className="text-center py-20 text-slate-400 border-2 border-dashed rounded-3xl">No services found.</div>
                 ) : (
                     filteredServices.map((s) => {
-                        // Display price logic: "Starts from" lowest active variant
+                        // Smart Price Display
                         const minPrice = s.variants?.length ? Math.min(...s.variants.map(v => v.price)) : 0;
                         const activeVariant = s.variants && s.variants[0];
 
@@ -288,6 +290,7 @@ function BookingContent() {
                                     : "border-transparent hover:border-zinc-200 hover:shadow-lg"
                                 }`}
                             >
+                                {/* SMART BADGE */}
                                 {s.badge && <span className="absolute top-6 left-6 z-20 bg-gradient-to-r from-blue-600 to-cyan-500 text-white text-[10px] font-bold px-3 py-1.5 rounded-full uppercase tracking-wider shadow-lg">{s.badge}</span>}
                                 
                                 <div className="flex flex-col sm:flex-row gap-5">
@@ -299,6 +302,7 @@ function BookingContent() {
                                                 <h3 className="font-black text-xl md:text-2xl leading-none">{s.title}</h3>
                                                 <div className="text-right">
                                                     <span className="block text-xl md:text-2xl font-black text-blue-600">
+                                                        {s.variants.length > 1 && <span className="text-[10px] text-slate-400 font-bold uppercase mr-1">From</span>}
                                                         ₹{minPrice}
                                                     </span>
                                                     {activeVariant?.old_price && activeVariant.old_price > activeVariant.price && (
@@ -306,11 +310,20 @@ function BookingContent() {
                                                     )}
                                                 </div>
                                             </div>
+                                            
                                             <p className="text-slate-500 text-xs md:text-sm leading-relaxed mb-3 line-clamp-2">{s.description}</p>
                                             
-                                            {s.variants && s.variants.length > 1 && (
+                                            {/* SMART BENEFITS TAGS */}
+                                            {s.benefits && s.benefits.length > 0 && (
                                                 <div className="flex flex-wrap gap-2 mt-auto">
-                                                    <span className="text-[9px] font-bold uppercase bg-blue-50 text-blue-600 px-2 py-1 rounded border border-blue-100">{s.variants.length} Options Available</span>
+                                                    {s.benefits.slice(0, 3).map((b, i) => (
+                                                        <span key={i} className="text-[9px] font-bold uppercase bg-blue-50 text-blue-600 px-2 py-1 rounded border border-blue-100">
+                                                            ✓ {b}
+                                                        </span>
+                                                    ))}
+                                                    {s.benefits.length > 3 && (
+                                                        <span className="text-[9px] font-bold uppercase bg-slate-50 text-slate-400 px-2 py-1 rounded">+{s.benefits.length - 3}</span>
+                                                    )}
                                                 </div>
                                             )}
                                     </div>
@@ -322,7 +335,7 @@ function BookingContent() {
             </div>
         </div>
                 
-        {/* --- RIGHT: BILLING & FORM (UPDATED FOR DYNAMIC PRICING) --- */}
+        {/* --- RIGHT: BILLING & FORM (V4.0) --- */}
         <div className="lg:col-span-5">
             <div className="bg-white p-6 md:p-8 rounded-[2.5rem] shadow-xl border border-zinc-100 lg:sticky lg:top-24">
                 
@@ -350,14 +363,14 @@ function BookingContent() {
                                         <button 
                                             key={v.id}
                                             onClick={() => setSelectedVariant(v)}
-                                            className={`p-3 rounded-xl border text-left transition-all ${
+                                            className={`p-3 rounded-xl border text-left transition-all relative overflow-hidden ${
                                                 selectedVariant.id === v.id 
                                                 ? "bg-white text-black border-white" 
                                                 : "bg-slate-800 text-slate-300 border-slate-700 hover:border-slate-500"
                                             }`}
                                         >
-                                            <div className="text-xs font-black uppercase">{v.duration}</div>
-                                            <div className="text-[10px]">₹{v.price}</div>
+                                            <div className="text-xs font-black uppercase z-10 relative">{v.duration}</div>
+                                            <div className="text-[10px] z-10 relative">₹{v.price}</div>
                                         </button>
                                     ))}
                                 </div>
@@ -458,7 +471,7 @@ function BookingContent() {
   );
 }
 
-// 2. THE WRAPPER (Suspense Boundary)
+// 2. THE WRAPPER
 export default function BookPage() {
   return (
     <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-zinc-50 font-black uppercase tracking-widest text-[10px]">Buffer Loading...</div>}>
