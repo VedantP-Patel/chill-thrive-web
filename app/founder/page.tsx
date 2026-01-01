@@ -2,15 +2,24 @@
 
 import React, { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { motion, useScroll, useTransform } from "framer-motion";
+import { motion, useScroll, useTransform, Variants } from "framer-motion"; // <--- 1. Import Variants
 import Image from "next/image";
 
 // --- ANIMATION CONFIG ---
-const fadeInUp = {
+// 2. Add ': Variants' to explicitly type these objects
+const fadeInUp: Variants = {
   hidden: { opacity: 0, y: 60 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.8, ease: [0.22, 1, 0.36, 1] } }
+  visible: { 
+    opacity: 1, 
+    y: 0, 
+    transition: { 
+      duration: 0.8, 
+      ease: [0.22, 1, 0.36, 1] // TypeScript now accepts this as a Bezier Tuple
+    } 
+  }
 };
-const staggerContainer = {
+
+const staggerContainer: Variants = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
@@ -19,6 +28,7 @@ const staggerContainer = {
 };
 
 export default function FounderPage() {
+  // ... rest of the code remains exactly the same ...
   const [profile, setProfile] = useState<any>(null);
   
   // FIXED: Track Window Scroll (No Ref needed) prevents hydration errors
