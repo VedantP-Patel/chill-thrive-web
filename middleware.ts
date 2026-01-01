@@ -1,44 +1,82 @@
-import { createMiddlewareClient } from '@supabase/auth-helpers-nextjs'
-import { NextResponse } from 'next/server'
-import type { NextRequest } from 'next/server'
+import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import { NextResponse, type NextRequest } from 'next/server'
 
-export async function middleware(req: NextRequest) {
-  // 1. Initialize Response
-  const res = NextResponse.next()
-  
-  // 2. Create Supabase Client
-  const supabase = createMiddlewareClient({ req, res })
+export async function middleware(request: NextRequest) {
+  // 1. Create an initial response
+  let response = NextResponse.next({
+    request: {
+      headers: request.headers,
+    },
+  })
 
-  // 3. Refresh Session (Security Check)
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
+  // 2. Initialize Supabase Client (Manages Cookies for Auth)
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return request.cookies.get(name)?.value
+        },
+        set(name: string, value: string, options: CookieOptions) {
+          request.cookies.set({
+            name,
+            value,
+            ...options,
+          })
+          response = NextResponse.next({
+            request: {
+              headers: request.headers,
+            },
+          })
+          response.cookies.set({
+            name,
+            value,
+            ...options,
+          })
+        },
+        remove(name: string, options: CookieOptions) {
+          request.cookies.set({
+            name,
+            value: '',
+            ...options,
+          })
+          response = NextResponse.next({
+            request: {
+              headers: request.headers,
+            },
+          })
+          response.cookies.set({
+            name,
+            value: '',
+            ...options,
+          })
+        },
+      },
+    }
+  )
 
-  const path = req.nextUrl.pathname;
+  // 3. Check Session Security
+  const { data: { user } } = await supabase.auth.getUser()
 
-  // 4. Admin Guard Protocol
-  // If user is trying to access "/admin" AND has no valid session...
-  if (path.startsWith('/admin') && !session) {
-    // ...Intercept and redirect to Login Page
-    return NextResponse.redirect(new URL('/login', req.url))
+  // 4. Admin Gatekeeping
+  // If user tries to access /admin AND is NOT logged in -> Redirect to Login
+  if (request.nextUrl.pathname.startsWith('/admin') && !user) {
+    return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  // 5. Auth Loop Prevention
-  // If user is AT "/login" BUT already has a session...
-  if (path.startsWith('/login') && session) {
-    // ...Bounce them back to Admin (No need to login twice)
-    return NextResponse.redirect(new URL('/admin', req.url))
+  // 5. Login Redirect
+  // If user is at /login BUT IS logged in -> Redirect to Admin
+  if (request.nextUrl.pathname.startsWith('/login') && user) {
+    return NextResponse.redirect(new URL('/admin', request.url))
   }
 
-  return res
+  return response
 }
 
-// 🔒 SECURITY SCOPE
-// This config ensures the middleware ONLY wakes up for these paths.
-// It explicitly ignores static files, images, and public pages.
 export const config = {
   matcher: [
-    '/admin/:path*', // Secure the Admin Folder
-    '/login',        // Handle Login Logic
+    '/admin/:path*',
+    '/login',
   ],
 }
