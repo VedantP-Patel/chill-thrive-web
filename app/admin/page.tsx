@@ -173,7 +173,7 @@ export default function AdminPage() {
     return slots;
   };
 
-    // --- 4. SMART FILTERING LOGIC (REPLACE YOUR EXISTING USEEFFECT) ---
+// --- 4. SMART FILTERING LOGIC (FIXED) ---
   useEffect(() => {
     let res = bookings;
 
@@ -183,25 +183,21 @@ export default function AdminPage() {
       res = res.filter(b => 
         (b.user_name || "").toLowerCase().includes(lower) ||
         (b.user_email || "").toLowerCase().includes(lower) ||
-        (b.id || "").toLowerCase().includes(lower)
+        String(b.id).toLowerCase().includes(lower) // <--- FIXED LINE
       );
     }
 
     // B. Tab Filters (STRICT MODE)
     if (bookingFilter === 'active') {
-        // ONLY show sessions that are currently RUNNING
         res = res.filter(b => (b.status || '').toLowerCase() === 'in_progress');
     } 
     else if (bookingFilter === 'pending') {
-        // Show pending approvals
         res = res.filter(b => ['pending', 'payment_review'].includes((b.status || '').toLowerCase()));
     } 
     else if (bookingFilter === 'upcoming') {
-        // Show confirmed slots (BUT NOT started ones)
         res = res.filter(b => (b.status || '').toLowerCase() === 'confirmed');
     } 
     else if (bookingFilter === 'history') {
-        // Show past stuff
         res = res.filter(b => ['completed', 'done', 'cancelled', 'rejected', 'no_show'].includes((b.status || '').toLowerCase()));
     }
 
