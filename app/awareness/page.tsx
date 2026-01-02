@@ -2,21 +2,25 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { motion } from "framer-motion";
+import { motion, Variants } from "framer-motion"; // <--- Added Variants import
 import { 
   ThermometerSnowflake, Brain, HeartPulse, ShieldAlert, 
   Flame, CheckCircle2, XCircle, Activity, BookOpen 
 } from "lucide-react";
 
-// --- ANIMATION VARIANTS ---
-const containerVar = {
+// --- ANIMATION VARIANTS (Typed explicitly) ---
+const containerVar: Variants = {
   hidden: { opacity: 0 },
   show: { opacity: 1, transition: { staggerChildren: 0.15 } }
 };
 
-const sectionVar = {
+const sectionVar: Variants = {
   hidden: { y: 30, opacity: 0 },
-  show: { y: 0, opacity: 1, transition: { type: "spring", stiffness: 50 } }
+  show: { 
+    y: 0, 
+    opacity: 1, 
+    transition: { type: "spring", stiffness: 50 } 
+  }
 };
 
 export default function AwarenessPage() {
