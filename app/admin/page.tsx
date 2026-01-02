@@ -792,8 +792,8 @@ const handleMarkActive = async (id: string) => {
                             {/* 2. PENDING ACTIONS */}
                             {bookingFilter === 'pending' && (
                               <>
-                                <button type="button" onClick={(e) => { e.stopPropagation(); handleVerifyPayment(String(b.id)); }} className="px-4 py-2 bg-black text-white font-bold text-[10px] uppercase rounded-lg hover:bg-zinc-800 shadow-lg">Approve</button>
-                                <button type="button" onClick={(e) => { e.stopPropagation(); handleCancelBooking(String(b.id)); }} className="px-3 py-2 border border-red-200 text-red-500 font-bold text-[10px] uppercase rounded-lg hover:bg-red-50">✕</button>
+                                <button type="button" onClick={(e) => { e.stopPropagation(); handleVerifyPayment(b.id); }} className="px-4 py-2 bg-black text-white font-bold text-[10px] uppercase rounded-lg hover:bg-zinc-800 shadow-lg">Approve</button>
+                                <button type="button" onClick={(e) => { e.stopPropagation(); handleCancelBooking(b.id); }} className="px-3 py-2 border border-red-200 text-red-500 font-bold text-[10px] uppercase rounded-lg hover:bg-red-50">✕</button>
                               </>
                             )}
 
