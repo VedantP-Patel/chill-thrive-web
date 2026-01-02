@@ -2,22 +2,30 @@
 
 import React, { useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, Variants } from "framer-motion"; // <--- Added Variants import
 import { 
     Search, Phone, Mail, RefreshCw, AlertCircle, Clock, 
     PhoneCall, CheckCircle2, XCircle, Calendar, 
     CreditCard, User, Activity, ArrowRight, Zap, ShieldCheck
 } from "lucide-react";
 
-// --- ANIMATION CONFIG ---
-const containerVar = {
+// --- ANIMATION CONFIG (Typed explicitly) ---
+const containerVar: Variants = {
   hidden: { opacity: 0, y: 20 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: "easeOut" } }
+  visible: { 
+    opacity: 1, 
+    y: 0, 
+    transition: { duration: 0.6, ease: "easeOut" } 
+  }
 };
 
-const cardEntryVar = {
+const cardEntryVar: Variants = {
   hidden: { x: 20, opacity: 0 },
-  visible: { x: 0, opacity: 1, transition: { type: "spring", stiffness: 100 } }
+  visible: { 
+    x: 0, 
+    opacity: 1, 
+    transition: { type: "spring", stiffness: 100 } 
+  }
 };
 
 // --- STATUS STEPS ---
