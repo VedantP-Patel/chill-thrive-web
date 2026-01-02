@@ -3,20 +3,24 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { motion, Variants } from "framer-motion"; // <--- Added Variants import
 import { ArrowRight, Sparkles, Zap, Activity, Star, Clock } from "lucide-react";
 
 const FALLBACK_IMG = "https://images.unsplash.com/photo-1544367563-12123d896889?q=80&w=1000";
 
-// --- ANIMATION VARIANTS ---
-const containerVar = {
+// --- ANIMATION VARIANTS (Typed explicitly) ---
+const containerVar: Variants = {
   hidden: { opacity: 0 },
   show: { opacity: 1, transition: { staggerChildren: 0.1 } }
 };
 
-const cardVar = {
+const cardVar: Variants = {
   hidden: { y: 40, opacity: 0 },
-  show: { y: 0, opacity: 1, transition: { type: "spring", stiffness: 50, damping: 20 } }
+  show: { 
+    y: 0, 
+    opacity: 1, 
+    transition: { type: "spring", stiffness: 50, damping: 20 } 
+  }
 };
 
 export default function ServicesPage() {
