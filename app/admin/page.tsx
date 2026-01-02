@@ -784,7 +784,7 @@ const handleMarkActive = async (id: string) => {
                             
                             {/* 1. ACTIVE TAB ACTIONS */}
                             {bookingFilter === 'active' && (
-                                <button type="button" onClick={(e) => { e.stopPropagation(); handleMarkDone(b.id); }} className="px-6 py-3 bg-green-600 text-white font-black text-[10px] uppercase rounded-xl hover:bg-green-700 shadow-lg shadow-green-200 flex items-center gap-2 transition-transform active:scale-95">
+                            <button type="button" onClick={(e) => { e.stopPropagation(); handleMarkDone(String(b.id)); }} className="px-6 py-3 bg-green-600 text-white font-black text-[10px] uppercase rounded-xl hover:bg-green-700 shadow-lg shadow-green-200 flex items-center gap-2 transition-transform active:scale-95">
                                     ✓ Finish Session
                                 </button>
                             )}
