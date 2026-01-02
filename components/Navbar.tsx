@@ -24,16 +24,17 @@ export default function Navbar() {
   }, [pathname]);
 
   // 3. Hide Navbar on Admin or Login
-  if (pathname.startsWith("/admin") || pathname.startsWith("/login")) return null;
+  if (pathname?.startsWith("/admin") || pathname?.startsWith("/login")) return null;
 
   // Logic: Solid White if Scrolled OR Not Home OR Mobile Menu Open
   const isSolid = isScrolled || pathname !== "/" || isMobileMenuOpen;
 
-  // 4. Links Configuration
+  // 4. Links Configuration (ADDED AWARENESS)
   const links = [
     { name: "Home", path: "/" },
-    { name: "Services", path: "/services" }, // Updated to point to the new Menu page
+    { name: "Services", path: "/services" },
     { name: "Gallery", path: "/gallery" },
+    { name: "Awareness", path: "/awareness" }, // <--- NEW LINK ADDED
     { name: "Track", path: "/track" },
     { name: "Founder", path: "/founder" },
     { name: "Contact", path: "/contact" },
@@ -61,7 +62,7 @@ export default function Navbar() {
         </Link>
 
         {/* DESKTOP MENU */}
-        <div className="hidden md:flex items-center gap-8">
+        <div className="hidden md:flex items-center gap-6 xl:gap-8">
           {links.map((link) => (
             <Link
               key={link.name}

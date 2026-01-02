@@ -1,187 +1,286 @@
+"use client";
+
+import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import Link from "next/link";
-import React from "react";
+import { motion } from "framer-motion";
+import { 
+  ThermometerSnowflake, Brain, HeartPulse, ShieldAlert, 
+  Flame, CheckCircle2, XCircle, Activity, BookOpen 
+} from "lucide-react";
 
-export const revalidate = 0; 
-export const dynamic = "force-dynamic";
-
-// --- STANDARD RENDERER (For other sections) ---
-const MarkdownRenderer = ({ content }: { content: string }) => {
-  if (!content) return null;
-  const cleanContent = content.replace(/\\n/g, "\n");
-  const paragraphs = cleanContent.split("\n");
-
-  return (
-    <div className="space-y-4">
-      {paragraphs.map((line, index) => {
-        if (!line.trim()) return <div key={index} className="h-2" />;
-        if (line.trim().startsWith("•") || line.trim().startsWith("-")) {
-            return (
-                <div key={index} className="flex items-start gap-3 pl-2">
-                    <span className="mt-2 w-1.5 h-1.5 rounded-full shrink-0 bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.8)]"></span>
-                    <p className="leading-7 text-lg text-slate-300">{parseBold(line.replace(/^[•-]\s*/, ""))}</p>
-                </div>
-            )
-        }
-        return <p key={index} className="leading-8 text-lg text-slate-400">{parseBold(line)}</p>;
-      })}
-    </div>
-  );
+// --- ANIMATION VARIANTS ---
+const containerVar = {
+  hidden: { opacity: 0 },
+  show: { opacity: 1, transition: { staggerChildren: 0.15 } }
 };
 
-// --- SPECIAL RENDERER FOR MYTHS & FACTS ---
-const MythFactRenderer = ({ content }: { content: string }) => {
-    if (!content) return null;
-    const cleanContent = content.replace(/\\n/g, "\n");
-    // Split by double newlines to separate Myth/Fact blocks if possible, or just parse line by line
-    const lines = cleanContent.split("\n").filter(l => l.trim().length > 0);
-
-    return (
-        <div className="space-y-6">
-            {lines.map((line, index) => {
-                const isMyth = line.toLowerCase().startsWith("myth:");
-                const isFact = line.toLowerCase().startsWith("fact:");
-
-                if (isMyth) {
-                    return (
-                        <div key={index} className="flex gap-3 items-start opacity-70">
-                            <span className="text-red-500 font-bold text-xl">✕</span>
-                            <p className="text-red-300/80 italic line-through decoration-red-500/30 text-lg">
-                                {line.replace(/myth:/i, "").trim()}
-                            </p>
-                        </div>
-                    );
-                }
-
-                if (isFact) {
-                    return (
-                        <div key={index} className="flex gap-3 items-start bg-cyan-950/30 p-4 rounded-xl border border-cyan-500/20 shadow-sm mb-6">
-                            <span className="text-green-400 font-bold text-xl">✓</span>
-                            <p className="text-cyan-100 font-medium text-lg leading-relaxed">
-                                {parseBold(line.replace(/fact:/i, "").trim())}
-                            </p>
-                        </div>
-                    );
-                }
-
-                // Normal text inside this block
-                return <p key={index} className="text-slate-400 pl-8">{line}</p>;
-            })}
-        </div>
-    );
-}
-
-const parseBold = (text: string) => {
-    return text.split(/(\*\*.*?\*\*)/g).map((part, i) => {
-        if (part.startsWith("**") && part.endsWith("**")) {
-            return <strong key={i} className="font-bold text-white tracking-wide">{part.slice(2, -2)}</strong>;
-        }
-        return <span key={i}>{part}</span>;
-    });
+const sectionVar = {
+  hidden: { y: 30, opacity: 0 },
+  show: { y: 0, opacity: 1, transition: { type: "spring", stiffness: 50 } }
 };
 
-export default async function AwarenessPage() {
-  const { data: blocks } = await supabase.from("content_blocks").select("*").eq("category", "awareness");
-  const getBlock = (slug: string) => blocks?.find(b => b.slug === slug) || { title: "", content: "" };
+export default function AwarenessPage() {
+  const [content, setContent] = useState<any>({});
+  const [loading, setLoading] = useState(true);
 
-  return (
-    <main className="min-h-screen bg-slate-950 text-slate-200 selection:bg-cyan-500 selection:text-black font-sans">
+  // --- FETCH CONTENT ---
+  useEffect(() => {
+    const fetchContent = async () => {
+      // Try to fetch from DB
+      const { data } = await supabase.from("awareness_content").select("*");
       
-      {/* HERO */}
-      <div className="relative pt-32 pb-20 px-6 overflow-hidden">
-        <div className="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] bg-blue-900/20 rounded-full blur-[120px] pointer-events-none"></div>
-        <div className="absolute top-[10%] right-[-10%] w-[500px] h-[500px] bg-cyan-900/20 rounded-full blur-[100px] pointer-events-none"></div>
+      const contentMap: any = {};
+      
+      // If DB has data, map it. Otherwise use Fallbacks.
+      if (data && data.length > 0) {
+        data.forEach((item: any) => {
+            contentMap[item.section_key] = item;
+        });
+      }
+      
+      setContent(contentMap);
+      setLoading(false);
+    };
+    fetchContent();
+  }, []);
 
-        <div className="max-w-5xl mx-auto text-center relative z-10">
-          <div className="inline-block px-4 py-1.5 rounded-full border border-cyan-500/30 bg-cyan-950/30 text-cyan-400 font-bold text-[10px] tracking-[0.2em] uppercase mb-6 backdrop-blur-sm">
-            Physiology & Performance
-          </div>
-          <h1 className="text-5xl md:text-7xl font-black tracking-tighter text-white mb-8 drop-shadow-2xl">
-            MASTER YOUR <br/>
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300">BIOLOGY.</span>
-          </h1>
-          <p className="text-xl text-slate-400 max-w-2xl mx-auto leading-relaxed">
-            Recovery is an active process. Understand the mechanisms behind the cold.
-          </p>
-        </div>
-      </div>
-
-      <div className="max-w-6xl mx-auto px-6 py-12 space-y-12">
-        
-        {/* GRID 1 */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <section className="bg-slate-900/50 p-8 md:p-12 rounded-[2rem] border border-slate-800 hover:border-slate-700 transition-colors backdrop-blur-sm">
-                <div className="w-12 h-12 bg-blue-500/10 rounded-2xl flex items-center justify-center text-2xl mb-6 text-blue-400 border border-blue-500/20">❄️</div>
-                <h2 className="text-3xl font-bold mb-6 tracking-tight text-white">{getBlock('cold-therapy').title || 'The Basics'}</h2>
-                <MarkdownRenderer content={getBlock('cold-therapy').content} />
-            </section>
-
-            <section className="bg-gradient-to-br from-slate-900 to-slate-950 p-8 md:p-12 rounded-[2rem] border border-cyan-900/30 relative overflow-hidden group">
-                <div className="absolute -right-20 -top-20 w-64 h-64 bg-cyan-500 rounded-full blur-[80px] opacity-10 group-hover:opacity-20 transition-opacity"></div>
-                <div className="relative z-10">
-                    <div className="w-12 h-12 bg-cyan-500/10 rounded-2xl flex items-center justify-center text-2xl mb-6 text-cyan-300 border border-cyan-500/20">⚡</div>
-                    <h2 className="text-3xl font-bold mb-6 tracking-tight text-white">
-                        <span className="text-cyan-400">Deep Dive:</span> {getBlock('science').title || 'The Science'}
-                    </h2>
-                    <MarkdownRenderer content={getBlock('science').content} />
+  return (
+    <main className="min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-blue-100 selection:text-blue-900 pt-32 pb-20 overflow-x-hidden">
+      
+      {/* 🌌 HERO SECTION */}
+      <section className="relative px-6 mb-24">
+        <div className="max-w-7xl mx-auto text-center">
+            <motion.div 
+                initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8 }}
+            >
+                <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-blue-100 bg-white text-blue-600 text-[10px] font-black uppercase tracking-widest mb-6 shadow-sm">
+                    <BookOpen size={12} /> Education Hub
                 </div>
-            </section>
+                <h1 className="text-5xl md:text-8xl font-black tracking-tighter text-slate-900 mb-6">
+                    RECOVERY <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-cyan-500">SCIENCE</span>
+                </h1>
+                <p className="text-lg md:text-xl text-slate-500 max-w-3xl mx-auto font-medium leading-relaxed">
+                    Understand the mechanics of human performance. We combine ancient wisdom with modern physiological science to optimize your biology.
+                </p>
+            </motion.div>
         </div>
+      </section>
 
-        {/* CONTRAST */}
-        <section className="relative rounded-[2rem] overflow-hidden border border-slate-800 bg-slate-900">
-            <div className="grid grid-cols-1 md:grid-cols-12 min-h-[500px]">
-                <div className="md:col-span-5 bg-gradient-to-br from-red-900 to-blue-900 relative p-10 flex flex-col justify-center items-center text-center text-white">
-                    <div className="absolute inset-0 bg-slate-950/40"></div>
-                    <div className="relative z-10">
-                        <h3 className="text-6xl font-black mb-2 opacity-90 drop-shadow-xl">VS</h3>
-                        <p className="font-bold tracking-[0.3em] text-sm uppercase opacity-75">Fire & Ice</p>
+      {/* 🧠 SECTION 1: WHAT IS COLD THERAPY? */}
+      <motion.section 
+        variants={containerVar} initial="hidden" whileInView="show" viewport={{ once: true }}
+        className="max-w-7xl mx-auto px-6 mb-32"
+      >
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+            <motion.div variants={sectionVar}>
+                <h2 className="text-xs font-bold text-blue-600 uppercase tracking-[0.3em] mb-4">The Methodology</h2>
+                <h3 className="text-4xl md:text-5xl font-black text-slate-900 mb-6 leading-tight">
+                    Controlled <br/>Cold Exposure.
+                </h3>
+                <div className="prose prose-lg text-slate-600 leading-relaxed">
+                    <p>
+                        {content['intro']?.content || 
+                        "Cold Water Immersion (CWI) is more than just a test of will. It is a calculated physiological stressor that triggers a cascade of hormonal and vascular responses. By exposing the body to temperatures between 10°C and 15°C, we initiate the 'Fight or Flight' response in a controlled environment, training your nervous system to remain calm under pressure."}
+                    </p>
+                </div>
+            </motion.div>
+            <motion.div variants={sectionVar} className="relative">
+                <div className="absolute inset-0 bg-blue-600/5 rounded-[2.5rem] rotate-3"></div>
+                <div className="relative bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-2xl">
+                    <div className="flex items-center gap-4 mb-6">
+                        <div className="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center text-blue-600">
+                            <ThermometerSnowflake size={24} />
+                        </div>
+                        <div>
+                            <p className="font-bold text-slate-900">Therapeutic Range</p>
+                            <p className="text-xs text-slate-500 uppercase tracking-wider">10°C — 15°C</p>
+                        </div>
+                    </div>
+                    <div className="space-y-4">
+                        {["Vasoconstriction", "Metabolic Boost", "Immune System Activation"].map((item, i) => (
+                            <div key={i} className="flex items-center gap-3 p-4 bg-slate-50 rounded-xl border border-slate-100">
+                                <CheckCircle2 size={18} className="text-blue-500" />
+                                <span className="font-bold text-slate-700 text-sm uppercase">{item}</span>
+                            </div>
+                        ))}
                     </div>
                 </div>
-                <div className="md:col-span-7 p-10 md:p-16 flex flex-col justify-center">
-                    <h2 className="text-3xl md:text-4xl font-bold mb-8 text-white">{getBlock('heat-vs-cold').title || 'Heat vs. Cold'}</h2>
-                    <MarkdownRenderer content={getBlock('heat-vs-cold').content} />
-                </div>
+            </motion.div>
+        </div>
+      </motion.section>
+
+      {/* 🧬 SECTION 2: THE SCIENCE (CARDS) */}
+      <section className="bg-slate-900 py-24 mb-32 relative overflow-hidden">
+        {/* Background FX */}
+        <div className="absolute top-0 right-0 w-[50vw] h-[50vw] bg-blue-600/20 rounded-full blur-[120px] pointer-events-none"></div>
+        
+        <div className="max-w-7xl mx-auto px-6 relative z-10">
+            <div className="text-center mb-16">
+                <h2 className="text-xs font-bold text-blue-400 uppercase tracking-[0.3em] mb-4">Physiological Impact</h2>
+                <h3 className="text-4xl font-black text-white">Why It Works</h3>
             </div>
-        </section>
 
-        {/* GRID 2: MYTHS (HIGHLIGHTED) & SAFETY */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                {/* Card 1 */}
+                <motion.div 
+                    initial={{ y: 30, opacity: 0 }} whileInView={{ y: 0, opacity: 1 }} transition={{ delay: 0.1 }}
+                    className="bg-white/5 backdrop-blur-md border border-white/10 p-8 rounded-[2rem] hover:border-blue-500/50 transition-colors"
+                >
+                    <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center text-white mb-6 shadow-lg shadow-blue-600/30">
+                        <Brain size={24} />
+                    </div>
+                    <h4 className="text-xl font-black text-white mb-3">Dopamine Spike</h4>
+                    <p className="text-slate-400 leading-relaxed text-sm">
+                        Cold exposure can increase dopamine levels by up to 250%. This creates a sustained mood boost and improved focus that lasts for hours after the session.
+                    </p>
+                </motion.div>
+
+                {/* Card 2 */}
+                <motion.div 
+                    initial={{ y: 30, opacity: 0 }} whileInView={{ y: 0, opacity: 1 }} transition={{ delay: 0.2 }}
+                    className="bg-white/5 backdrop-blur-md border border-white/10 p-8 rounded-[2rem] hover:border-blue-500/50 transition-colors"
+                >
+                    <div className="w-12 h-12 bg-cyan-500 rounded-2xl flex items-center justify-center text-white mb-6 shadow-lg shadow-cyan-500/30">
+                        <HeartPulse size={24} />
+                    </div>
+                    <h4 className="text-xl font-black text-white mb-3">Vascular Health</h4>
+                    <p className="text-slate-400 leading-relaxed text-sm">
+                        The cycle of constriction (cold) and dilation (rewarming) acts as a pump for your lymphatic system, flushing out metabolic waste and reducing inflammation.
+                    </p>
+                </motion.div>
+
+                {/* Card 3 */}
+                <motion.div 
+                    initial={{ y: 30, opacity: 0 }} whileInView={{ y: 0, opacity: 1 }} transition={{ delay: 0.3 }}
+                    className="bg-white/5 backdrop-blur-md border border-white/10 p-8 rounded-[2rem] hover:border-blue-500/50 transition-colors"
+                >
+                    <div className="w-12 h-12 bg-purple-500 rounded-2xl flex items-center justify-center text-white mb-6 shadow-lg shadow-purple-500/30">
+                        <Activity size={24} />
+                    </div>
+                    <h4 className="text-xl font-black text-white mb-3">Recovery Speed</h4>
+                    <p className="text-slate-400 leading-relaxed text-sm">
+                        Drastically reduces Delayed Onset Muscle Soreness (DOMS) by lowering tissue temperature and reducing the metabolic rate of damaged tissue.
+                    </p>
+                </motion.div>
+            </div>
+        </div>
+      </section>
+
+      {/* 🔥❄️ SECTION 3: HEAT VS COLD */}
+      <motion.section 
+        variants={containerVar} initial="hidden" whileInView="show" viewport={{ once: true }}
+        className="max-w-6xl mx-auto px-6 mb-32"
+      >
+        <div className="text-center mb-16">
+            <h2 className="text-xs font-bold text-blue-600 uppercase tracking-[0.3em] mb-4">Comparative Analysis</h2>
+            <h3 className="text-4xl font-black text-slate-900">Heat vs. Cold Therapy</h3>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            {/* HEAT */}
+            <div className="bg-white p-8 rounded-[2.5rem] border border-orange-100 shadow-xl relative overflow-hidden group">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-orange-100 rounded-full blur-[50px] -translate-y-1/2 translate-x-1/2 opacity-50"></div>
+                <div className="flex items-center gap-4 mb-6">
+                    <span className="p-3 bg-orange-50 text-orange-600 rounded-xl"><Flame size={24}/></span>
+                    <h4 className="text-2xl font-black text-slate-900">Heat Therapy</h4>
+                </div>
+                <ul className="space-y-4">
+                    <li className="flex items-start gap-3 text-sm text-slate-600 font-medium">
+                        <span className="text-orange-500 mt-1">●</span> Promotes blood flow & muscle relaxation.
+                    </li>
+                    <li className="flex items-start gap-3 text-sm text-slate-600 font-medium">
+                        <span className="text-orange-500 mt-1">●</span> Best for stiffness and chronic pain.
+                    </li>
+                    <li className="flex items-start gap-3 text-sm text-slate-600 font-medium">
+                        <span className="text-orange-500 mt-1">●</span> Increases tissue elasticity.
+                    </li>
+                </ul>
+            </div>
+
+            {/* COLD */}
+            <div className="bg-white p-8 rounded-[2.5rem] border border-blue-100 shadow-xl relative overflow-hidden group">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-blue-100 rounded-full blur-[50px] -translate-y-1/2 translate-x-1/2 opacity-50"></div>
+                <div className="flex items-center gap-4 mb-6">
+                    <span className="p-3 bg-blue-50 text-blue-600 rounded-xl"><ThermometerSnowflake size={24}/></span>
+                    <h4 className="text-2xl font-black text-slate-900">Cold Therapy</h4>
+                </div>
+                <ul className="space-y-4">
+                    <li className="flex items-start gap-3 text-sm text-slate-600 font-medium">
+                        <span className="text-blue-500 mt-1">●</span> Reduces inflammation & numbs pain.
+                    </li>
+                    <li className="flex items-start gap-3 text-sm text-slate-600 font-medium">
+                        <span className="text-blue-500 mt-1">●</span> Best for acute injuries and recovery.
+                    </li>
+                    <li className="flex items-start gap-3 text-sm text-slate-600 font-medium">
+                        <span className="text-blue-500 mt-1">●</span> Improves mental resilience.
+                    </li>
+                </ul>
+            </div>
+        </div>
+      </motion.section>
+
+      {/* 🤥✅ SECTION 4: MYTHS vs FACTS */}
+      <section className="max-w-4xl mx-auto px-6 mb-32">
+        <div className="text-center mb-12">
+             <h3 className="text-3xl font-black text-slate-900">Common Myths</h3>
+        </div>
+        <div className="space-y-4">
+            {[
+                { m: "Colder is always better.", f: "False. The therapeutic window is 10-15°C. Going near freezing increases risk without significant added benefit." },
+                { m: "You should stay in as long as possible.", f: "False. 2-5 minutes is the optimal duration for physiological benefits. More is not better." },
+                { m: "It's just a placebo.", f: "False. Cold exposure triggers measurable hormonal and vascular changes, including norepinephrine release." }
+            ].map((item, i) => (
+                <div key={i} className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col md:flex-row gap-6 items-start md:items-center">
+                    <div className="flex-1">
+                        <div className="flex items-center gap-2 text-red-500 font-bold uppercase text-xs tracking-widest mb-1">
+                            <XCircle size={14}/> Myth
+                        </div>
+                        <p className="font-bold text-slate-900 text-lg">{item.m}</p>
+                    </div>
+                    <div className="hidden md:block w-px h-12 bg-slate-100"></div>
+                    <div className="flex-1">
+                        <div className="flex items-center gap-2 text-green-600 font-bold uppercase text-xs tracking-widest mb-1">
+                            <CheckCircle2 size={14}/> Fact
+                        </div>
+                        <p className="text-slate-600 text-sm leading-relaxed">{item.f}</p>
+                    </div>
+                </div>
+            ))}
+        </div>
+      </section>
+
+      {/* ⚠️ SECTION 5: MEDICAL DISCLAIMER */}
+      <section className="max-w-5xl mx-auto px-6">
+        <div className="bg-amber-50 border border-amber-100 p-8 md:p-12 rounded-[2.5rem] relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-12 opacity-5">
+                <ShieldAlert size={200} className="text-amber-900" />
+            </div>
             
-            {/* 4. MYTHS - USING SPECIAL RENDERER */}
-            <section className="lg:col-span-2 bg-slate-900 p-8 md:p-12 rounded-[2rem] border border-slate-800">
-                <div className="flex items-center gap-4 mb-8">
-                    <span className="text-3xl grayscale opacity-70">🤔</span>
-                    <h2 className="text-2xl font-bold text-white">Debunking Myths</h2>
+            <div className="relative z-10">
+                <div className="flex items-center gap-3 mb-6">
+                    <ShieldAlert className="text-amber-600" size={32} />
+                    <h2 className="text-2xl font-black text-amber-900 uppercase">Medical Disclaimer</h2>
                 </div>
-                {/* USE SPECIAL RENDERER HERE */}
-                <div className="bg-slate-950/30 p-2 md:p-6 rounded-3xl">
-                    <MythFactRenderer content={getBlock('myths').content} />
+                
+                <div className="grid md:grid-cols-2 gap-8 text-amber-900/80 font-medium leading-relaxed">
+                    <p>
+                        Cold Water Immersion places a significant stress on the cardiovascular system. It is <strong>NOT</strong> recommended for individuals with:
+                    </p>
+                    <ul className="space-y-2 list-disc list-inside">
+                        <li>High blood pressure (Hypertension)</li>
+                        <li>Heart disease or Angina</li>
+                        <li>Raynaud’s Disease</li>
+                        <li>Pregnancy</li>
+                        <li>History of seizures or epilepsy</li>
+                    </ul>
                 </div>
-            </section>
-
-            {/* 5. SAFETY */}
-            <section className="lg:col-span-1 bg-red-950/20 p-8 rounded-[2rem] border border-red-900/30 flex flex-col">
-                <div className="mb-6">
-                    <div className="w-12 h-12 bg-red-500/10 rounded-full flex items-center justify-center text-xl text-red-500 mb-4 border border-red-500/20">⚕️</div>
-                    <h2 className="text-xl font-bold text-red-400">{getBlock('risks').title || 'Medical Safety'}</h2>
-                </div>
-                <div className="flex-1 text-red-200/80 text-sm leading-6">
-                    <MarkdownRenderer content={getBlock('risks').content} />
-                </div>
-            </section>
+                <p className="mt-8 text-xs text-amber-800 font-bold uppercase tracking-widest border-t border-amber-200 pt-6">
+                    * Always consult a physician before beginning any new recovery protocol.
+                </p>
+            </div>
         </div>
+      </section>
 
-        {/* FOOTER */}
-        <div className="py-20 text-center">
-            <h3 className="text-3xl font-bold mb-8 text-white">Ready to apply the science?</h3>
-            <Link href="/book" className="group relative inline-flex items-center justify-center px-10 py-5 font-bold text-black transition-all duration-200 bg-white rounded-full hover:bg-cyan-400 hover:scale-105 shadow-[0_0_20px_rgba(255,255,255,0.2)]">
-                <span>Book a Session</span>
-                <svg className="w-5 h-5 ml-2 -mr-1 transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path></svg>
-            </Link>
-        </div>
-
-      </div>
     </main>
   );
 }
