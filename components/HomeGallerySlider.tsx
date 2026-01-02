@@ -57,6 +57,8 @@ export default function HomeGallerySlider({ images }: { images: any[] }) {
           {images.map((_, idx) => (
             <button
               key={idx}
+              type="button" // <--- Added type
+              aria-label={`Go to slide ${idx + 1}`} // <--- Added aria-label
               onClick={() => setCurrent(idx)}
               className={`w-2 h-2 rounded-full transition-all duration-300 ${
                 current === idx ? "bg-white w-8" : "bg-white/40 hover:bg-white/80"
@@ -70,12 +72,16 @@ export default function HomeGallerySlider({ images }: { images: any[] }) {
       {images.length > 1 && (
         <>
             <button 
+                type="button" // <--- Added type
+                aria-label="Previous slide" // <--- Added aria-label
                 onClick={() => setCurrent((prev) => (prev - 1 + images.length) % images.length)}
                 className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center rounded-full bg-black/30 text-white backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/60 z-20"
             >
                 ←
             </button>
             <button 
+                type="button" // <--- Added type
+                aria-label="Next slide" // <--- Added aria-label
                 onClick={() => setCurrent((prev) => (prev + 1) % images.length)}
                 className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center rounded-full bg-black/30 text-white backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/60 z-20"
             >

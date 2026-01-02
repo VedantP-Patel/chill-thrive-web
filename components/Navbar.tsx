@@ -29,12 +29,12 @@ export default function Navbar() {
   // Logic: Solid White if Scrolled OR Not Home OR Mobile Menu Open
   const isSolid = isScrolled || pathname !== "/" || isMobileMenuOpen;
 
-  // 4. Links Configuration (ADDED AWARENESS)
+  // 4. Links Configuration
   const links = [
     { name: "Home", path: "/" },
     { name: "Services", path: "/services" },
     { name: "Gallery", path: "/gallery" },
-    { name: "Awareness", path: "/awareness" }, // <--- NEW LINK ADDED
+    { name: "Awareness", path: "/awareness" },
     { name: "Track", path: "/track" },
     { name: "Founder", path: "/founder" },
     { name: "Contact", path: "/contact" },
@@ -92,30 +92,33 @@ export default function Navbar() {
           </Link>
         </div>
 
-        {/* MOBILE TOGGLE BUTTON */}
+        {/* MOBILE TOGGLE BUTTON (Fixed) */}
         <button
+          type="button"
+          aria-label="Toggle menu"
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
           className="md:hidden relative z-50 p-2 focus:outline-none"
         >
           <div className="w-6 h-5 flex flex-col justify-between">
             <span
               className={`h-0.5 w-full bg-current transform transition-all duration-300 ${
-                isSolid ? "text-black" : "text-white"
+                isSolid ? "text-slate-900" : "text-white"
               } ${isMobileMenuOpen ? "rotate-45 translate-y-2" : ""}`}
             />
             <span
               className={`h-0.5 w-full bg-current transition-all duration-300 ${
-                isSolid ? "text-black" : "text-white"
+                isSolid ? "text-slate-900" : "text-white"
               } ${isMobileMenuOpen ? "opacity-0" : "opacity-100"}`}
             />
             <span
               className={`h-0.5 w-full bg-current transform transition-all duration-300 ${
-                isSolid ? "text-black" : "text-white"
+                isSolid ? "text-slate-900" : "text-white"
               } ${isMobileMenuOpen ? "-rotate-45 -translate-y-2.5" : ""}`}
             />
           </div>
         </button>
-      </div>
+      </div> 
+      {/* ^^^ This closing div was missing in the snippet, restored here. */}
 
       {/* MOBILE MENU OVERLAY */}
       <div

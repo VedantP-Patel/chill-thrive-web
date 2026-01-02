@@ -141,26 +141,19 @@ export default function BookForm({ services, qrCodeUrl }: BookFormProps) {
     e.preventDefault();
     
     // --- VALIDATION START ---
-    
-    // 1. Phone Validation
     if (phone.length !== 10) { 
         setStatus("Error: Phone must be exactly 10 digits."); 
         return; 
     }
-
-    // 2. Email Validation (Regex for strict format: name@domain.com)
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
         setStatus("Error: Please enter a valid email address.");
         return;
     }
-
-    // 3. Payment UTR Validation
     if (paymentMethod === "QR Code" && transactionId.length < 4) { 
         setStatus("Error: Please enter valid Payment Ref/UTR."); 
         return; 
     }
-    
     // --- VALIDATION END ---
 
     setLoading(true); 
@@ -196,10 +189,10 @@ export default function BookForm({ services, qrCodeUrl }: BookFormProps) {
           <div className="relative z-30 space-y-4 md:space-y-6">
             <div key={selectedService?.id || 'empty'} className="animate-fade-in-up">
                 {!selectedService ? (
-                   <div>
-                       <h2 className="text-3xl md:text-4xl font-light mb-1 md:mb-2 tracking-tighter text-white">INITIALIZE</h2>
-                       <p className="text-blue-200 font-mono text-[10px] md:text-xs tracking-widest uppercase">Select Protocol to Begin</p>
-                   </div>
+                    <div>
+                        <h2 className="text-3xl md:text-4xl font-light mb-1 md:mb-2 tracking-tighter text-white">INITIALIZE</h2>
+                        <p className="text-blue-200 font-mono text-[10px] md:text-xs tracking-widest uppercase">Select Protocol to Begin</p>
+                    </div>
                 ) : (
                     <div>
                         <p className="text-[10px] uppercase tracking-[0.2em] text-blue-200 mb-2 font-bold hidden md:block">Protocol Active</p>
@@ -249,7 +242,12 @@ export default function BookForm({ services, qrCodeUrl }: BookFormProps) {
             <div className={`space-y-6 transition-all duration-500 ease-out ${selectedService ? "opacity-100 translate-y-0" : "opacity-30 translate-y-4 pointer-events-none grayscale"}`}>
                 <div className="grid grid-cols-2 gap-4 md:gap-6">
                      <div className="space-y-2"><label className="text-[10px] font-bold uppercase text-slate-400 tracking-widest">Duration</label><div className="flex bg-slate-50 p-1 rounded-lg border border-slate-200">{["30", "60"].map((d) => (<button key={d} type="button" onClick={() => setDuration(d as "30"|"60")} className={`flex-1 py-2 text-xs font-bold rounded-md transition-all duration-300 ${duration === d ? "bg-white text-blue-600 shadow-sm border border-slate-100" : "text-slate-400 hover:text-slate-600"}`}>{d} MIN</button>))}</div></div>
-                     <div className="space-y-2"><label className="text-[10px] font-bold uppercase text-slate-400 tracking-widest">Date</label><input type="date" min={todayStr} value={date} onChange={(e) => { setDate(e.target.value); setTime(""); }} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all font-medium" required /></div>
+                     
+                     {/* FIX: Added htmlFor and id */}
+                     <div className="space-y-2">
+                        <label htmlFor="date-input" className="text-[10px] font-bold uppercase text-slate-400 tracking-widest">Date</label>
+                        <input id="date-input" type="date" min={todayStr} value={date} onChange={(e) => { setDate(e.target.value); setTime(""); }} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all font-medium" required />
+                     </div>
                 </div>
 
                 {isDayClosed ? (
@@ -259,9 +257,10 @@ export default function BookForm({ services, qrCodeUrl }: BookFormProps) {
                    </div>
                 ) : (
                     <div className="space-y-2">
-                        <label className="text-[10px] font-bold uppercase text-slate-400 tracking-widest">Available Slot</label>
+                        {/* FIX: Added htmlFor and id */}
+                        <label htmlFor="time-select" className="text-[10px] font-bold uppercase text-slate-400 tracking-widest">Available Slot</label>
                         <div className="relative">
-                            <select value={time} onChange={(e) => setTime(e.target.value)} disabled={!date} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium text-slate-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none appearance-none disabled:opacity-50 transition-all" required>
+                            <select id="time-select" value={time} onChange={(e) => setTime(e.target.value)} disabled={!date} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium text-slate-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none appearance-none disabled:opacity-50 transition-all" required>
                                 <option value="">{availableSlots.length>0 ? `Select from ${availableSlots.length} available slots` : date ? "-- No Slots Available --" : "-- Select Date First --"}</option>
                                 {availableSlots.map(s => <option key={s} value={s}>{s}</option>)}
                             </select>
@@ -271,18 +270,22 @@ export default function BookForm({ services, qrCodeUrl }: BookFormProps) {
                 )}
 
                 <div className="space-y-4 pt-2 border-t border-slate-100">
-                    <input type="text" placeholder="FULL NAME" value={name} onChange={e => setName(e.target.value)} className="w-full p-3 bg-transparent border-b-2 border-slate-100 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 outline-none transition-colors uppercase tracking-wide font-bold" required />
+                    {/* FIX: Added aria-label */}
+                    <input type="text" aria-label="Full Name" placeholder="FULL NAME" value={name} onChange={e => setName(e.target.value)} className="w-full p-3 bg-transparent border-b-2 border-slate-100 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 outline-none transition-colors uppercase tracking-wide font-bold" required />
+                    
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-                        {/* EMAIL INPUT WITH VALIDATION */}
+                        {/* FIX: Added aria-label */}
                         <input 
                             type="email" 
+                            aria-label="Email Address"
                             placeholder="EMAIL" 
                             value={email} 
                             onChange={e => setEmail(e.target.value)} 
                             className="w-full p-3 bg-transparent border-b-2 border-slate-100 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 outline-none transition-colors uppercase tracking-wide font-bold" 
                             required 
                         />
-                        <input type="tel" placeholder="PHONE (10 Digits)" maxLength={10} value={phone} onChange={e => setPhone(e.target.value.replace(/\D/,''))} className="w-full p-3 bg-transparent border-b-2 border-slate-100 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 outline-none transition-colors font-mono font-bold" required />
+                        {/* FIX: Added aria-label */}
+                        <input type="tel" aria-label="Phone Number" placeholder="PHONE (10 Digits)" maxLength={10} value={phone} onChange={e => setPhone(e.target.value.replace(/\D/,''))} className="w-full p-3 bg-transparent border-b-2 border-slate-100 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 outline-none transition-colors font-mono font-bold" required />
                     </div>
                 </div>
             </div>
@@ -295,7 +298,8 @@ export default function BookForm({ services, qrCodeUrl }: BookFormProps) {
                        <div className="w-16 h-16 md:w-20 md:h-20 relative bg-white border border-slate-200 p-1 rounded shrink-0"><Image src={qrCodeUrl} alt="QR" fill className="object-contain" unoptimized /></div>
                        <div className="flex-1 space-y-2">
                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Scan & Paste UTR</p>
-                           <input type="text" placeholder="Paste UPI Ref ID (12 Digits)" maxLength={20} value={transactionId} onChange={e => setTransactionId(e.target.value)} className="w-full p-2 bg-white border border-slate-200 rounded text-slate-900 font-mono text-sm focus:border-blue-500 outline-none uppercase" />
+                           {/* FIX: Added aria-label */}
+                           <input type="text" aria-label="Transaction ID" placeholder="Paste UPI Ref ID (12 Digits)" maxLength={20} value={transactionId} onChange={e => setTransactionId(e.target.value)} className="w-full p-2 bg-white border border-slate-200 rounded text-slate-900 font-mono text-sm focus:border-blue-500 outline-none uppercase" />
                            <p className="text-[10px] text-slate-400">*Copy from GPay/PhonePe and paste here.</p>
                        </div>
                    </div>

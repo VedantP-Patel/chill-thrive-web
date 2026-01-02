@@ -3,10 +3,9 @@
 import { useState, useEffect, Suspense } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useRouter, useSearchParams } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { 
-  Search, Calendar, Clock, Users, ChevronRight, 
-  CreditCard, Sparkles, Receipt, CheckCircle2, 
+  Search, Calendar, Sparkles, Receipt, CheckCircle2, 
   Copy, Minus, Plus, ArrowRight, Tag 
 } from "lucide-react";
 
@@ -225,14 +224,16 @@ function BookingContent() {
                     <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Booking ID</p>
                     <p className="font-mono font-bold text-slate-900 text-lg">{confirmedBookingId}</p>
                 </div>
-                <button onClick={() => { navigator.clipboard.writeText(confirmedBookingId); alert("Copied!"); }} className="p-2 bg-white rounded-xl shadow-sm border border-slate-100 text-slate-400 hover:text-blue-600 transition-colors active:scale-95 z-10">
+                {/* FIXED: Added type and aria-label */}
+                <button type="button" aria-label="Copy Booking ID" onClick={() => { navigator.clipboard.writeText(confirmedBookingId); alert("Copied!"); }} className="p-2 bg-white rounded-xl shadow-sm border border-slate-100 text-slate-400 hover:text-blue-600 transition-colors active:scale-95 z-10">
                     <Copy size={20} />
                 </button>
             </div>
 
             <div className="flex flex-col gap-3">
-                <button onClick={() => router.push('/track')} className="w-full py-4 bg-black text-white font-bold rounded-2xl uppercase tracking-widest hover:bg-zinc-800 transition-all shadow-lg">Track Status</button>
-                <button onClick={() => window.location.reload()} className="w-full py-4 bg-white border border-slate-200 text-slate-900 font-bold rounded-2xl uppercase tracking-widest hover:bg-slate-50 transition-all">New Booking</button>
+                {/* FIXED: Added type */}
+                <button type="button" onClick={() => router.push('/track')} className="w-full py-4 bg-black text-white font-bold rounded-2xl uppercase tracking-widest hover:bg-zinc-800 transition-all shadow-lg">Track Status</button>
+                <button type="button" onClick={() => window.location.reload()} className="w-full py-4 bg-white border border-slate-200 text-slate-900 font-bold rounded-2xl uppercase tracking-widest hover:bg-slate-50 transition-all">New Booking</button>
             </div>
         </motion.div>
     </div>
@@ -253,7 +254,9 @@ function BookingContent() {
                 <div className="flex flex-col sm:flex-row gap-4 mt-6">
                     <div className="relative flex-1">
                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+                        {/* FIXED: Added aria-label */}
                         <input 
+                            aria-label="Search Services"
                             className="w-full h-14 pl-12 pr-4 bg-white rounded-2xl border-none shadow-sm font-bold text-slate-900 placeholder:text-slate-400 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
                             placeholder="Find your recovery..."
                             value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
@@ -261,7 +264,8 @@ function BookingContent() {
                     </div>
                     <div className="flex bg-white p-1 rounded-2xl shadow-sm h-14 w-fit">
                         {["all", "single", "combo"].map(t => (
-                            <button key={t} onClick={()=>setFilterType(t as any)} className={`px-5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${filterType===t?"bg-black text-white shadow-md":"text-slate-400 hover:bg-slate-50"}`}>
+                            // FIXED: Added type
+                            <button type="button" key={t} onClick={()=>setFilterType(t as any)} className={`px-5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${filterType===t?"bg-black text-white shadow-md":"text-slate-400 hover:bg-slate-50"}`}>
                                 {t === 'combo' ? 'Combos' : t}
                             </button>
                         ))}
@@ -286,7 +290,8 @@ function BookingContent() {
                             {s.badge && <span className="absolute top-4 right-4 bg-black text-white text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider z-20 shadow-lg">{s.badge}</span>}
                             
                             <div className="aspect-[4/3] rounded-[1.5rem] overflow-hidden mb-4 bg-slate-100 relative">
-                                <img src={s.booking_image_url || s.image_url || FALLBACK_IMG} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" onError={(e)=>(e.target as HTMLImageElement).src=FALLBACK_IMG} />
+                                {/* FIXED: Added alt */}
+                                <img src={s.booking_image_url || s.image_url || FALLBACK_IMG} alt={s.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" onError={(e)=>(e.target as HTMLImageElement).src=FALLBACK_IMG} />
                                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-60"></div>
                                 <div className="absolute bottom-4 left-4 text-white">
                                     <h3 className="text-xl font-black leading-none mb-1">{s.title}</h3>
@@ -322,6 +327,7 @@ function BookingContent() {
                             <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Select Plan</label>
                             <div className="grid grid-cols-2 gap-2">
                                 {selectedService.variants.map((v) => (
+                                    // FIXED: Added type
                                     <button type="button" key={v.id} onClick={() => setSelectedVariant(v)}
                                         className={`p-3 rounded-2xl border-2 text-left transition-all relative overflow-hidden ${selectedVariant?.id === v.id ? "border-blue-600 bg-blue-50/50 text-blue-900" : "border-slate-100 bg-white text-slate-400 hover:border-slate-300"}`}
                                     >
@@ -337,9 +343,11 @@ function BookingContent() {
                         <div className="space-y-3">
                             <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Guests</label>
                             <div className="flex items-center gap-4 bg-slate-50 p-2 rounded-2xl border border-slate-100 w-fit">
-                                <button type="button" onClick={() => setFormData({...formData, guests: Math.max(1, formData.guests - 1)})} className="w-10 h-10 bg-white rounded-xl shadow-sm flex items-center justify-center text-slate-900 hover:text-blue-600"><Minus size={18}/></button>
+                                {/* FIXED: Added type & aria-label */}
+                                <button type="button" aria-label="Decrease Guests" onClick={() => setFormData({...formData, guests: Math.max(1, formData.guests - 1)})} className="w-10 h-10 bg-white rounded-xl shadow-sm flex items-center justify-center text-slate-900 hover:text-blue-600"><Minus size={18}/></button>
                                 <span className="text-lg font-black w-8 text-center">{formData.guests}</span>
-                                <button type="button" onClick={() => setFormData({...formData, guests: Math.min(selectedService.capacity, formData.guests + 1)})} className="w-10 h-10 bg-white rounded-xl shadow-sm flex items-center justify-center text-slate-900 hover:text-blue-600"><Plus size={18}/></button>
+                                {/* FIXED: Added type & aria-label */}
+                                <button type="button" aria-label="Increase Guests" onClick={() => setFormData({...formData, guests: Math.min(selectedService.capacity, formData.guests + 1)})} className="w-10 h-10 bg-white rounded-xl shadow-sm flex items-center justify-center text-slate-900 hover:text-blue-600"><Plus size={18}/></button>
                             </div>
                         </div>
 
@@ -348,7 +356,8 @@ function BookingContent() {
                             <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Schedule</label>
                             <div className="relative">
                                 <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                                <input type="date" className="w-full pl-12 pr-4 py-3 bg-slate-50 rounded-2xl font-bold text-sm outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer" 
+                                {/* FIXED: Added aria-label */}
+                                <input type="date" aria-label="Booking Date" className="w-full pl-12 pr-4 py-3 bg-slate-50 rounded-2xl font-bold text-sm outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer" 
                                     min={new Date().toISOString().split("T")[0]}
                                     value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} 
                                 />
@@ -359,6 +368,7 @@ function BookingContent() {
                                 {loadingSlots ? <div className="col-span-4 text-center text-xs text-slate-400 py-4">Checking slots...</div> : 
                                  availableSlots.length === 0 ? <div className="col-span-4 text-center text-xs text-slate-400 py-4 italic">{slotStatus}</div> :
                                  availableSlots.map(t => (
+                                    // FIXED: Added type
                                     <button type="button" key={t} onClick={() => setFormData({...formData, time: t})}
                                         className={`py-2 rounded-xl text-[10px] font-bold transition-all ${formData.time === t ? "bg-black text-white shadow-lg scale-105" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}
                                     >
@@ -371,10 +381,13 @@ function BookingContent() {
                         {/* 4. Details */}
                         <div className="space-y-3">
                             <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Your Details</label>
-                            <input className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="Full Name" value={formData.name} onChange={e=>setFormData({...formData, name:e.target.value})} />
+                            {/* FIXED: Added aria-label */}
+                            <input aria-label="Full Name" className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="Full Name" value={formData.name} onChange={e=>setFormData({...formData, name:e.target.value})} />
                             <div className="grid grid-cols-2 gap-3">
-                                <input className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-sm outline-none focus:ring-2 focus:ring-blue-500" type="tel" placeholder="Phone" maxLength={10} value={formData.phone} onChange={e=>setFormData({...formData, phone:e.target.value.replace(/\D/g,"")})} />
-                                <input className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-sm outline-none focus:ring-2 focus:ring-blue-500" type="email" placeholder="Email" value={formData.email} onChange={e=>setFormData({...formData, email:e.target.value})} />
+                                {/* FIXED: Added aria-label */}
+                                <input aria-label="Phone Number" className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-sm outline-none focus:ring-2 focus:ring-blue-500" type="tel" placeholder="Phone" maxLength={10} value={formData.phone} onChange={e=>setFormData({...formData, phone:e.target.value.replace(/\D/g,"")})} />
+                                {/* FIXED: Added aria-label */}
+                                <input aria-label="Email Address" className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-sm outline-none focus:ring-2 focus:ring-blue-500" type="email" placeholder="Email" value={formData.email} onChange={e=>setFormData({...formData, email:e.target.value})} />
                             </div>
                         </div>
 
@@ -382,21 +395,27 @@ function BookingContent() {
                         <div className="space-y-3">
                              <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Offers & Payment</label>
                              <div className="flex gap-2">
-                                <input className="flex-1 p-3 bg-slate-50 rounded-2xl font-bold text-sm uppercase outline-none placeholder:text-slate-300" placeholder="PROMO CODE" value={formData.promoCode} onChange={e=>setFormData({...formData, promoCode:e.target.value})} />
-                                <button type="button" onClick={handleApplyCoupon} className="px-4 bg-slate-900 text-white rounded-2xl font-bold text-xs"><Tag size={16}/></button>
+                                {/* FIXED: Added aria-label */}
+                                <input aria-label="Promo Code" className="flex-1 p-3 bg-slate-50 rounded-2xl font-bold text-sm uppercase outline-none placeholder:text-slate-300" placeholder="PROMO CODE" value={formData.promoCode} onChange={e=>setFormData({...formData, promoCode:e.target.value})} />
+                                {/* FIXED: Added type & aria-label */}
+                                <button type="button" aria-label="Apply Coupon" onClick={handleApplyCoupon} className="px-4 bg-slate-900 text-white rounded-2xl font-bold text-xs"><Tag size={16}/></button>
                              </div>
 
                              <div className="flex bg-slate-100 p-1 rounded-2xl">
+                                {/* FIXED: Added type */}
                                 <button type="button" onClick={()=>setPaymentMethod("qr")} className={`flex-1 py-3 rounded-xl text-xs font-bold uppercase transition-all ${paymentMethod==="qr"?"bg-white shadow-sm text-blue-600":"text-slate-400"}`}>UPI / QR</button>
+                                {/* FIXED: Added type */}
                                 <button type="button" onClick={()=>setPaymentMethod("cash")} className={`flex-1 py-3 rounded-xl text-xs font-bold uppercase transition-all ${paymentMethod==="cash"?"bg-white shadow-sm text-green-600":"text-slate-400"}`}>Pay at Venue</button>
-                            </div>
-                            
-                            {paymentMethod === 'qr' && (
-                                <div className="bg-blue-50 rounded-2xl p-4 text-center border border-blue-100">
-                                    <div className="w-32 h-32 bg-white rounded-xl mx-auto mb-3 shadow-sm p-2"><img src={adminSettings.upi_qr} className="w-full h-full object-contain"/></div>
-                                    <input className="w-full p-3 text-center bg-white rounded-xl font-bold text-sm outline-none border border-blue-200 focus:border-blue-500 uppercase tracking-widest" placeholder="ENTER UTR / REF NO" value={formData.utr} onChange={e=>setFormData({...formData, utr:e.target.value})} />
-                                </div>
-                            )}
+                             </div>
+                             
+                             {paymentMethod === 'qr' && (
+                                 <div className="bg-blue-50 rounded-2xl p-4 text-center border border-blue-100">
+                                     {/* FIXED: Added alt */}
+                                     <div className="w-32 h-32 bg-white rounded-xl mx-auto mb-3 shadow-sm p-2"><img src={adminSettings.upi_qr} alt="UPI QR Code" className="w-full h-full object-contain"/></div>
+                                     {/* FIXED: Added aria-label */}
+                                     <input aria-label="Transaction ID (UTR)" className="w-full p-3 text-center bg-white rounded-xl font-bold text-sm outline-none border border-blue-200 focus:border-blue-500 uppercase tracking-widest" placeholder="ENTER UTR / REF NO" value={formData.utr} onChange={e=>setFormData({...formData, utr:e.target.value})} />
+                                 </div>
+                             )}
                         </div>
 
                         {/* 6. INVOICE SUMMARY */}
