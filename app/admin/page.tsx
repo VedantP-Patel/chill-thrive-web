@@ -678,12 +678,15 @@ const handleMarkActive = async (id: string) => {
                         <p className="text-slate-400 font-medium text-sm">Manage sessions & Verify payments.</p>
                     </div>
                     <div className="flex gap-3 w-full md:w-auto bg-white/80 backdrop-blur-md p-2 rounded-2xl shadow-sm border border-white/50">
+                        {/* FIXED: Added aria-label */}
                         <input 
-                          type="text" placeholder="Search..." 
+                          type="text" 
+                          aria-label="Search Bookings"
+                          placeholder="Search..." 
                           className="w-full pl-4 pr-4 py-3 bg-slate-50 border-0 rounded-xl text-sm font-bold text-slate-700 outline-none" 
                           value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} 
                         />
-                        <button onClick={handleRefresh} className={`px-4 py-3 bg-black text-white rounded-xl font-bold hover:bg-zinc-800 ${isRefreshing?"animate-spin":""}`}>↻</button>
+                        <button type="button" onClick={handleRefresh} className={`px-4 py-3 bg-black text-white rounded-xl font-bold hover:bg-zinc-800 ${isRefreshing?"animate-spin":""}`}>↻</button>
                     </div>
                 </div>
 
@@ -842,15 +845,30 @@ const handleMarkActive = async (id: string) => {
                       <h3 className="text-xl font-black mb-1 text-center">SMART MOVE</h3>
                       <p className="text-xs text-slate-500 text-center mb-6">Rescheduling <strong>{rescheduleTarget.user_name}</strong></p>
                       <div className="space-y-4 mb-8">
-                        <input type="date" min={new Date().toLocaleDateString('en-CA')} value={rescheduleDate} onChange={e => { setRescheduleDate(e.target.value); setRescheduleTime(""); calculateAvailability(e.target.value, rescheduleTarget); }} className="w-full p-4 bg-slate-50 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-blue-500" />
-                        <select value={rescheduleTime} onChange={e => setRescheduleTime(e.target.value)} disabled={calculatingSlots || smartSlots.length === 0} className="w-full p-4 rounded-xl font-bold text-sm outline-none bg-blue-50 text-blue-900">
+                        {/* FIXED: Added aria-label */}
+                        <input 
+                          type="date" 
+                          aria-label="New Date"
+                          min={new Date().toLocaleDateString('en-CA')} 
+                          value={rescheduleDate} 
+                          onChange={e => { setRescheduleDate(e.target.value); setRescheduleTime(""); calculateAvailability(e.target.value, rescheduleTarget); }} 
+                          className="w-full p-4 bg-slate-50 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-blue-500" 
+                        />
+                        {/* FIXED: Added aria-label */}
+                        <select 
+                          aria-label="New Time Slot"
+                          value={rescheduleTime} 
+                          onChange={e => setRescheduleTime(e.target.value)} 
+                          disabled={calculatingSlots || smartSlots.length === 0} 
+                          className="w-full p-4 rounded-xl font-bold text-sm outline-none bg-blue-50 text-blue-900"
+                        >
                             <option value="">{calculatingSlots ? "Calculating..." : "Select Smart Slot"}</option>
                             {smartSlots.map(slot => <option key={slot} value={slot}>{slot}</option>)}
                         </select>
                       </div>
                       <div className="flex gap-3">
-                        <button onClick={() => setRescheduleTarget(null)} className="flex-1 py-4 bg-white border border-slate-200 text-slate-600 font-bold rounded-xl uppercase tracking-wider hover:bg-slate-50 text-xs">Cancel</button>
-                        <button onClick={confirmReschedule} className="flex-1 py-4 bg-black text-white font-bold rounded-xl uppercase tracking-wider hover:bg-zinc-800 shadow-lg text-xs">Confirm</button>
+                        <button type="button" onClick={() => setRescheduleTarget(null)} className="flex-1 py-4 bg-white border border-slate-200 text-slate-600 font-bold rounded-xl uppercase tracking-wider hover:bg-slate-50 text-xs">Cancel</button>
+                        <button type="button" onClick={confirmReschedule} className="flex-1 py-4 bg-black text-white font-bold rounded-xl uppercase tracking-wider hover:bg-zinc-800 shadow-lg text-xs">Confirm</button>
                       </div>
                     </div>
                   </div>
@@ -976,6 +994,7 @@ const handleMarkActive = async (id: string) => {
                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mt-2">Asset Configuration V3.9.1</p>
                     </div>
                     <button 
+                        type="button"
                         onClick={() => { 
                             setEditingService({ 
                                 id: 0, title: "", duration: "", badge: "",
@@ -1021,7 +1040,7 @@ const handleMarkActive = async (id: string) => {
                                     </div>
                                 </div>
 
-                                <button onClick={() => { setEditingService({...s, temp_benefit: ""}); setIsServiceModalOpen(true); }} className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center hover:bg-black hover:text-white transition-all shrink-0">
+                                <button type="button" onClick={() => { setEditingService({...s, temp_benefit: ""}); setIsServiceModalOpen(true); }} className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center hover:bg-black hover:text-white transition-all shrink-0">
                                     <span className="text-[10px] font-black uppercase">Edit</span>
                                 </button>
                             </div>
@@ -1059,7 +1078,7 @@ const handleMarkActive = async (id: string) => {
                                     <div className={`w-2 h-2 rounded-full ${s.is_active ? 'bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]' : 'bg-red-500'}`}></div>
                                     <span className="text-[10px] font-black uppercase text-slate-500 tracking-widest">{s.is_active ? 'Live' : 'Offline'}</span>
                                 </div>
-                                <button onClick={() => toggleServiceActive(s)} className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-tighter transition-all ${s.is_active ? 'bg-zinc-100 text-zinc-900' : 'bg-black text-white'}`}>
+                                <button type="button" onClick={() => toggleServiceActive(s)} className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-tighter transition-all ${s.is_active ? 'bg-zinc-100 text-zinc-900' : 'bg-black text-white'}`}>
                                     {s.is_active ? 'Take Offline' : 'Bring Live'}
                                 </button>
                             </div>
@@ -1097,18 +1116,19 @@ const handleMarkActive = async (id: string) => {
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     <div className="space-y-2">
                                         <label className="text-[10px] font-black uppercase text-slate-400 ml-3 tracking-widest">Service Title</label>
-                                        <input className="w-full p-4 pl-6 bg-slate-50 rounded-2xl font-bold text-xl text-slate-900 outline-none border-2 border-transparent focus:border-blue-500 focus:bg-white transition-all placeholder:text-slate-300" placeholder="e.g. Cryotherapy" value={editingService.title} onChange={e => setEditingService({...editingService, title: e.target.value})} />
+                                        <input aria-label="Service Title" className="w-full p-4 pl-6 bg-slate-50 rounded-2xl font-bold text-xl text-slate-900 outline-none border-2 border-transparent focus:border-blue-500 focus:bg-white transition-all placeholder:text-slate-300" placeholder="e.g. Cryotherapy" value={editingService.title} onChange={e => setEditingService({...editingService, title: e.target.value})} />
                                     </div>
                                     <div className="space-y-2">
                                         <label className="text-[10px] font-black uppercase text-slate-400 ml-3 tracking-widest">Badge Label</label>
                                         <div className="relative">
-                                            <input className="w-full p-4 pl-6 bg-slate-50 rounded-2xl font-bold text-sm text-blue-600 outline-none border-2 border-transparent focus:border-blue-500 focus:bg-white transition-all placeholder:text-slate-300 uppercase tracking-wider" placeholder="e.g. BEST SELLER" value={editingService.badge || ""} onChange={e => setEditingService({...editingService, badge: e.target.value})} />
+                                            <input aria-label="Badge Label" className="w-full p-4 pl-6 bg-slate-50 rounded-2xl font-bold text-sm text-blue-600 outline-none border-2 border-transparent focus:border-blue-500 focus:bg-white transition-all placeholder:text-slate-300 uppercase tracking-wider" placeholder="e.g. BEST SELLER" value={editingService.badge || ""} onChange={e => setEditingService({...editingService, badge: e.target.value})} />
                                             {editingService.badge && <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs">🏷️</span>}
                                         </div>
                                     </div>
                                     <div className="col-span-1 md:col-span-2 space-y-2">
                                         <label className="text-[10px] font-black uppercase text-slate-400 ml-3 tracking-widest">Public Description</label>
                                         <textarea 
+                                            aria-label="Service Description"
                                             rows={3} 
                                             className="w-full p-4 pl-6 bg-slate-50 rounded-2xl font-bold text-sm text-slate-700 outline-none border-2 border-transparent focus:border-blue-500 focus:bg-white transition-all placeholder:text-slate-300 resize-none leading-relaxed" 
                                             placeholder="Write a compelling description..." 
@@ -1119,7 +1139,7 @@ const handleMarkActive = async (id: string) => {
                                     <div className="space-y-2">
                                         <label className="text-[10px] font-black uppercase text-slate-400 ml-3 tracking-widest">Type</label>
                                         <div className="relative">
-                                            <select className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-sm outline-none border-2 border-transparent focus:border-blue-500 appearance-none cursor-pointer" value={editingService.type} onChange={e => setEditingService({...editingService, type: e.target.value})}>
+                                            <select aria-label="Service Type" className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-sm outline-none border-2 border-transparent focus:border-blue-500 appearance-none cursor-pointer" value={editingService.type} onChange={e => setEditingService({...editingService, type: e.target.value})}>
                                                 <option value="single">Single Session</option>
                                                 <option value="combo">Combo Package</option>
                                             </select>
@@ -1128,7 +1148,7 @@ const handleMarkActive = async (id: string) => {
                                     </div>
                                     <div className="space-y-2">
                                         <label className="text-[10px] font-black uppercase text-slate-400 ml-3 tracking-widest">Capacity</label>
-                                        <input type="number" className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-sm outline-none border-2 border-transparent focus:border-blue-500" value={editingService.capacity} onChange={e => setEditingService({...editingService, capacity: Number(e.target.value)})} />
+                                        <input aria-label="Service Capacity" type="number" className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-sm outline-none border-2 border-transparent focus:border-blue-500" value={editingService.capacity} onChange={e => setEditingService({...editingService, capacity: Number(e.target.value)})} />
                                     </div>
                                 </div>
 
@@ -1139,6 +1159,7 @@ const handleMarkActive = async (id: string) => {
                                     </div>
                                     <div className="flex gap-2">
                                         <input 
+                                            aria-label="Add Benefit"
                                             className="flex-1 p-4 bg-white rounded-2xl font-bold text-sm outline-none border-2 border-transparent focus:border-blue-500 transition-all placeholder:text-slate-300"
                                             placeholder="Type benefit (e.g. 'Detox') and press Enter..."
                                             value={editingService.temp_benefit || ""}
@@ -1174,9 +1195,9 @@ const handleMarkActive = async (id: string) => {
                                     <div className="space-y-3">
                                         {(editingService.variants || []).map((v: any) => (
                                             <div key={v.id} className="grid grid-cols-12 gap-3 bg-white p-3 rounded-2xl shadow-sm items-center border border-slate-100 hover:border-blue-200 transition-all">
-                                                <div className="col-span-5 flex items-center gap-2 bg-slate-50 rounded-xl px-3 py-2"><span className="text-lg opacity-30">⏳</span><input placeholder="e.g. 60 Mins" className="w-full bg-transparent font-bold text-sm outline-none placeholder:text-slate-300" value={v.duration} onChange={(e) => { const updated = editingService.variants.map((vt:any) => vt.id === v.id ? { ...vt, duration: e.target.value } : vt); setEditingService({ ...editingService, variants: updated }); }} /></div>
-                                                <div className="col-span-3 flex items-center gap-1 bg-slate-50 rounded-xl px-3 py-2"><span className="text-xs font-bold text-slate-400">₹</span><input type="number" placeholder="0" className="w-full bg-transparent font-black text-sm outline-none text-green-700 placeholder:text-slate-300" value={v.price} onChange={(e) => { const updated = editingService.variants.map((vt:any) => vt.id === v.id ? { ...vt, price: Number(e.target.value) } : vt); setEditingService({ ...editingService, variants: updated }); }} /></div>
-                                                <div className="col-span-2 flex items-center gap-1 bg-slate-50 rounded-xl px-3 py-2 border border-transparent focus-within:border-red-100 transition-colors"><span className="text-[10px] font-bold text-slate-300 line-through">₹</span><input type="number" placeholder="Old" className="w-full bg-transparent font-bold text-xs text-slate-400 outline-none placeholder:text-slate-200" value={v.old_price || ''} onChange={(e) => { const updated = editingService.variants.map((vt:any) => vt.id === v.id ? { ...vt, old_price: Number(e.target.value) } : vt); setEditingService({ ...editingService, variants: updated }); }} /></div>
+                                                <div className="col-span-5 flex items-center gap-2 bg-slate-50 rounded-xl px-3 py-2"><span className="text-lg opacity-30">⏳</span><input aria-label="Variant Duration" placeholder="e.g. 60 Mins" className="w-full bg-transparent font-bold text-sm outline-none placeholder:text-slate-300" value={v.duration} onChange={(e) => { const updated = editingService.variants.map((vt:any) => vt.id === v.id ? { ...vt, duration: e.target.value } : vt); setEditingService({ ...editingService, variants: updated }); }} /></div>
+                                                <div className="col-span-3 flex items-center gap-1 bg-slate-50 rounded-xl px-3 py-2"><span className="text-xs font-bold text-slate-400">₹</span><input aria-label="Variant Price" type="number" placeholder="0" className="w-full bg-transparent font-black text-sm outline-none text-green-700 placeholder:text-slate-300" value={v.price} onChange={(e) => { const updated = editingService.variants.map((vt:any) => vt.id === v.id ? { ...vt, price: Number(e.target.value) } : vt); setEditingService({ ...editingService, variants: updated }); }} /></div>
+                                                <div className="col-span-2 flex items-center gap-1 bg-slate-50 rounded-xl px-3 py-2 border border-transparent focus-within:border-red-100 transition-colors"><span className="text-[10px] font-bold text-slate-300 line-through">₹</span><input aria-label="Old Price" type="number" placeholder="Old" className="w-full bg-transparent font-bold text-xs text-slate-400 outline-none placeholder:text-slate-200" value={v.old_price || ''} onChange={(e) => { const updated = editingService.variants.map((vt:any) => vt.id === v.id ? { ...vt, old_price: Number(e.target.value) } : vt); setEditingService({ ...editingService, variants: updated }); }} /></div>
                                                 <div className="col-span-2 flex justify-end gap-2"><button type="button" onClick={() => { const updated = editingService.variants.map((vt:any) => vt.id === v.id ? { ...vt, active: !vt.active } : vt); setEditingService({ ...editingService, variants: updated }); }} className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${v.active ? 'bg-green-100 text-green-600' : 'bg-slate-100 text-slate-300'}`}>{v.active ? '●' : '○'}</button><button type="button" onClick={() => setEditingService({ ...editingService, variants: editingService.variants.filter((vt:any) => vt.id !== v.id) })} className="w-8 h-8 rounded-lg text-slate-300 hover:bg-red-50 hover:text-red-500 flex items-center justify-center font-bold transition-all">✕</button></div>
                                             </div>
                                         ))}
@@ -1189,20 +1210,20 @@ const handleMarkActive = async (id: string) => {
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
                                         {/* Home Card (16:9) */}
                                         <label className="cursor-pointer group relative aspect-video bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 hover:border-blue-400 hover:bg-blue-50 transition-all flex flex-col items-center justify-center overflow-hidden">
-                                            {serviceFiles['home'] ? <img src={URL.createObjectURL(serviceFiles['home'] as File)} className="absolute inset-0 w-full h-full object-cover" /> : editingService.image_url ? <img src={editingService.image_url} className="absolute inset-0 w-full h-full object-cover opacity-80" /> : <div className="text-center"><span className="text-2xl block mb-1 opacity-20">🖼️</span><span className="text-[8px] font-black uppercase text-slate-400">Home Card</span></div>}
-                                            <input type="file" className="hidden" onChange={e => e.target.files && setServiceFiles({...serviceFiles, home: e.target.files[0]})} />
+                                            {serviceFiles['home'] ? <img src={URL.createObjectURL(serviceFiles['home'] as File)} alt="Home Preview" className="absolute inset-0 w-full h-full object-cover" /> : editingService.image_url ? <img src={editingService.image_url} alt="Home Current" className="absolute inset-0 w-full h-full object-cover opacity-80" /> : <div className="text-center"><span className="text-2xl block mb-1 opacity-20">🖼️</span><span className="text-[8px] font-black uppercase text-slate-400">Home Card</span></div>}
+                                            <input aria-label="Upload Home Image" type="file" className="hidden" onChange={e => e.target.files && setServiceFiles({...serviceFiles, home: e.target.files[0]})} />
                                             <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"><span className="text-[10px] font-bold text-white uppercase tracking-widest">Change</span></div>
                                         </label>
                                         {/* Detail Banner (16:9) */}
                                         <label className="cursor-pointer group relative aspect-video bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 hover:border-blue-400 hover:bg-blue-50 transition-all flex flex-col items-center justify-center overflow-hidden">
-                                            {serviceFiles['detail'] ? <img src={URL.createObjectURL(serviceFiles['detail'] as File)} className="absolute inset-0 w-full h-full object-cover" /> : editingService.detail_image_url ? <img src={editingService.detail_image_url} className="absolute inset-0 w-full h-full object-cover opacity-80" /> : <div className="text-center"><span className="text-2xl block mb-1 opacity-20">🌄</span><span className="text-[8px] font-black uppercase text-slate-400">Detail Banner</span></div>}
-                                            <input type="file" className="hidden" onChange={e => e.target.files && setServiceFiles({...serviceFiles, detail: e.target.files[0]})} />
+                                            {serviceFiles['detail'] ? <img src={URL.createObjectURL(serviceFiles['detail'] as File)} alt="Detail Preview" className="absolute inset-0 w-full h-full object-cover" /> : editingService.detail_image_url ? <img src={editingService.detail_image_url} alt="Detail Current" className="absolute inset-0 w-full h-full object-cover opacity-80" /> : <div className="text-center"><span className="text-2xl block mb-1 opacity-20">🌄</span><span className="text-[8px] font-black uppercase text-slate-400">Detail Banner</span></div>}
+                                            <input aria-label="Upload Detail Image" type="file" className="hidden" onChange={e => e.target.files && setServiceFiles({...serviceFiles, detail: e.target.files[0]})} />
                                             <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"><span className="text-[10px] font-bold text-white uppercase tracking-widest">Change</span></div>
                                         </label>
                                         {/* Booking Thumb (1:1) */}
                                         <label className="cursor-pointer group relative aspect-square bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 hover:border-blue-400 hover:bg-blue-50 transition-all flex flex-col items-center justify-center overflow-hidden">
-                                            {serviceFiles['book'] ? <img src={URL.createObjectURL(serviceFiles['book'] as File)} className="absolute inset-0 w-full h-full object-cover" /> : editingService.booking_image_url ? <img src={editingService.booking_image_url} className="absolute inset-0 w-full h-full object-cover opacity-80" /> : <div className="text-center"><span className="text-2xl block mb-1 opacity-20">📱</span><span className="text-[8px] font-black uppercase text-slate-400">Book Thumb</span></div>}
-                                            <input type="file" className="hidden" onChange={e => e.target.files && setServiceFiles({...serviceFiles, book: e.target.files[0]})} />
+                                            {serviceFiles['book'] ? <img src={URL.createObjectURL(serviceFiles['book'] as File)} alt="Book Preview" className="absolute inset-0 w-full h-full object-cover" /> : editingService.booking_image_url ? <img src={editingService.booking_image_url} alt="Book Current" className="absolute inset-0 w-full h-full object-cover opacity-80" /> : <div className="text-center"><span className="text-2xl block mb-1 opacity-20">📱</span><span className="text-[8px] font-black uppercase text-slate-400">Book Thumb</span></div>}
+                                            <input aria-label="Upload Booking Image" type="file" className="hidden" onChange={e => e.target.files && setServiceFiles({...serviceFiles, book: e.target.files[0]})} />
                                             <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"><span className="text-[10px] font-bold text-white uppercase tracking-widest">Change</span></div>
                                         </label>
                                     </div>
@@ -1233,6 +1254,7 @@ const handleMarkActive = async (id: string) => {
                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mt-2">Personal Brand Configuration V4.2</p>
                         </div>
                         <button 
+                            type="button"
                             onClick={handleSaveFounder} 
                             disabled={loading} 
                             className="px-8 py-4 bg-blue-600 text-white font-black rounded-2xl uppercase tracking-tighter text-xs hover:bg-blue-700 transition-all shadow-xl flex items-center gap-2"
@@ -1250,9 +1272,9 @@ const handleMarkActive = async (id: string) => {
                             <div className="md:col-span-4">
                                 <label className="block cursor-pointer group relative aspect-[3/4] bg-slate-50 rounded-[2rem] border-2 border-dashed border-slate-200 hover:border-blue-400 overflow-hidden transition-all">
                                     {founderImageFile ? (
-                                        <img src={URL.createObjectURL(founderImageFile)} className="absolute inset-0 w-full h-full object-cover" />
+                                        <img src={URL.createObjectURL(founderImageFile)} alt="Founder Preview" className="absolute inset-0 w-full h-full object-cover" />
                                     ) : founderProfile.image_url ? (
-                                        <img src={founderProfile.image_url} className="absolute inset-0 w-full h-full object-cover" />
+                                        <img src={founderProfile.image_url} alt="Founder Current" className="absolute inset-0 w-full h-full object-cover" />
                                     ) : (
                                         <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-300 group-hover:text-blue-400">
                                             <span className="text-4xl mb-2">📸</span>
@@ -1271,22 +1293,22 @@ const handleMarkActive = async (id: string) => {
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-2">
                                         <label className="text-[10px] font-black uppercase text-slate-400 ml-3 tracking-widest">Full Name</label>
-                                        <input className="w-full p-4 pl-6 bg-slate-50 rounded-2xl font-bold text-xl outline-none focus:bg-white focus:ring-2 focus:ring-blue-100 transition-all" value={founderProfile.name || ""} onChange={e => setFounderProfile({...founderProfile, name: e.target.value})} placeholder="e.g. Alex Vikram" />
+                                        <input aria-label="Founder Name" className="w-full p-4 pl-6 bg-slate-50 rounded-2xl font-bold text-xl outline-none focus:bg-white focus:ring-2 focus:ring-blue-100 transition-all" value={founderProfile.name || ""} onChange={e => setFounderProfile({...founderProfile, name: e.target.value})} placeholder="e.g. Alex Vikram" />
                                     </div>
                                     <div className="space-y-2">
                                         <label className="text-[10px] font-black uppercase text-slate-400 ml-3 tracking-widest">Role Title</label>
-                                        <input className="w-full p-4 pl-6 bg-slate-50 rounded-2xl font-bold text-sm text-blue-600 outline-none focus:bg-white focus:ring-2 focus:ring-blue-100 transition-all uppercase tracking-wider" value={founderProfile.role || ""} onChange={e => setFounderProfile({...founderProfile, role: e.target.value})} placeholder="e.g. FOUNDER & LEAD ARCHITECT" />
+                                        <input aria-label="Founder Role" className="w-full p-4 pl-6 bg-slate-50 rounded-2xl font-bold text-sm text-blue-600 outline-none focus:bg-white focus:ring-2 focus:ring-blue-100 transition-all uppercase tracking-wider" value={founderProfile.role || ""} onChange={e => setFounderProfile({...founderProfile, role: e.target.value})} placeholder="e.g. FOUNDER & LEAD ARCHITECT" />
                                     </div>
                                 </div>
 
                                 <div className="space-y-2">
                                     <label className="text-[10px] font-black uppercase text-slate-400 ml-3 tracking-widest">Hero Quote</label>
-                                    <textarea rows={2} className="w-full p-4 pl-6 bg-slate-50 rounded-2xl font-medium text-lg italic text-slate-700 outline-none focus:bg-white focus:ring-2 focus:ring-blue-100 transition-all resize-none" value={founderProfile.quote || ""} onChange={e => setFounderProfile({...founderProfile, quote: e.target.value})} placeholder="The hook that appears on the hero section..." />
+                                    <textarea aria-label="Founder Quote" rows={2} className="w-full p-4 pl-6 bg-slate-50 rounded-2xl font-medium text-lg italic text-slate-700 outline-none focus:bg-white focus:ring-2 focus:ring-blue-100 transition-all resize-none" value={founderProfile.quote || ""} onChange={e => setFounderProfile({...founderProfile, quote: e.target.value})} placeholder="The hook that appears on the hero section..." />
                                 </div>
 
                                 <div className="space-y-2">
                                     <label className="text-[10px] font-black uppercase text-slate-400 ml-3 tracking-widest">The Origin Story</label>
-                                    <textarea rows={8} className="w-full p-6 bg-slate-50 rounded-2xl text-sm font-medium text-slate-600 leading-relaxed outline-none focus:bg-white focus:ring-2 focus:ring-blue-100 transition-all resize-none" value={founderProfile.story || ""} onChange={e => setFounderProfile({...founderProfile, story: e.target.value})} placeholder="Tell your journey here..." />
+                                    <textarea aria-label="Founder Story" rows={8} className="w-full p-6 bg-slate-50 rounded-2xl text-sm font-medium text-slate-600 leading-relaxed outline-none focus:bg-white focus:ring-2 focus:ring-blue-100 transition-all resize-none" value={founderProfile.story || ""} onChange={e => setFounderProfile({...founderProfile, story: e.target.value})} placeholder="Tell your journey here..." />
                                 </div>
                             </div>
                         </div>
@@ -1298,7 +1320,7 @@ const handleMarkActive = async (id: string) => {
                             <div className="bg-slate-900 p-8 rounded-[2.5rem] text-white relative overflow-hidden group">
                                 <div className="absolute top-0 right-0 w-32 h-32 bg-blue-600/30 rounded-full blur-3xl group-hover:bg-blue-500/50 transition-all"></div>
                                 <h3 className="text-[10px] font-black text-blue-400 uppercase tracking-[0.3em] mb-4">Core Mission</h3>
-                                <textarea rows={6} className="w-full bg-transparent text-xl md:text-2xl font-black leading-tight outline-none placeholder:text-slate-600 resize-none border-none focus:ring-0" value={founderProfile.mission || ""} onChange={e => setFounderProfile({...founderProfile, mission: e.target.value})} placeholder="ENTER MISSION STATEMENT..." />
+                                <textarea aria-label="Brand Mission" rows={6} className="w-full bg-transparent text-xl md:text-2xl font-black leading-tight outline-none placeholder:text-slate-600 resize-none border-none focus:ring-0" value={founderProfile.mission || ""} onChange={e => setFounderProfile({...founderProfile, mission: e.target.value})} placeholder="ENTER MISSION STATEMENT..." />
                             </div>
 
                             {/* Values Config (Dynamic Array with Icons) */}
@@ -1326,56 +1348,59 @@ const handleMarkActive = async (id: string) => {
                                 {/* Dynamic Values List */}
                                 {founderProfile.valuesList && founderProfile.valuesList.map((val: any, idx: number) => (
                                     <div key={idx} className="bg-white p-5 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col gap-3 relative group animate-in slide-in-from-right-4 duration-300">
-                                        
-                                        {/* Row Header */}
-                                        <div className="flex items-center justify-between mb-1">
-                                            <div className="flex items-center gap-2">
-                                                {/* EDITABLE ICON INPUT */}
-                                                <input 
-                                                    className="w-10 h-10 rounded-lg bg-slate-50 text-center text-xl cursor-pointer hover:bg-blue-50 focus:bg-white focus:ring-2 focus:ring-blue-200 outline-none transition-all"
-                                                    value={val.icon || "✨"}
-                                                    onChange={e => {
-                                                        const newList = [...founderProfile.valuesList];
-                                                        newList[idx].icon = e.target.value;
+                                            
+                                            {/* Row Header */}
+                                            <div className="flex items-center justify-between mb-1">
+                                                <div className="flex items-center gap-2">
+                                                    {/* EDITABLE ICON INPUT */}
+                                                    <input 
+                                                        aria-label={`Value Icon ${idx + 1}`}
+                                                        className="w-10 h-10 rounded-lg bg-slate-50 text-center text-xl cursor-pointer hover:bg-blue-50 focus:bg-white focus:ring-2 focus:ring-blue-200 outline-none transition-all"
+                                                        value={val.icon || "✨"}
+                                                        onChange={e => {
+                                                            const newList = [...founderProfile.valuesList];
+                                                            newList[idx].icon = e.target.value;
+                                                            setFounderProfile({ ...founderProfile, valuesList: newList });
+                                                        }}
+                                                        title="Click to edit emoji"
+                                                    />
+                                                    <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Value 0{idx + 1}</span>
+                                                </div>
+                                                <button 
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const newList = founderProfile.valuesList.filter((_:any, i:number) => i !== idx);
                                                         setFounderProfile({ ...founderProfile, valuesList: newList });
                                                     }}
-                                                    title="Click to edit emoji"
-                                                />
-                                                <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Value 0{idx + 1}</span>
+                                                    className="w-6 h-6 rounded-full bg-slate-50 text-slate-300 hover:bg-red-50 hover:text-red-500 flex items-center justify-center transition-all font-bold text-xs"
+                                                >
+                                                    ✕
+                                                </button>
                                             </div>
-                                            <button 
-                                                type="button"
-                                                onClick={() => {
-                                                    const newList = founderProfile.valuesList.filter((_:any, i:number) => i !== idx);
+                                            
+                                            {/* Inputs */}
+                                            <input 
+                                                aria-label={`Value Title ${idx + 1}`}
+                                                className="w-full bg-slate-50 p-3 rounded-xl font-black text-sm uppercase outline-none focus:bg-white focus:ring-2 focus:ring-blue-100 transition-all" 
+                                                value={val.title} 
+                                                onChange={e => {
+                                                    const newList = [...founderProfile.valuesList];
+                                                    newList[idx].title = e.target.value;
                                                     setFounderProfile({ ...founderProfile, valuesList: newList });
-                                                }}
-                                                className="w-6 h-6 rounded-full bg-slate-50 text-slate-300 hover:bg-red-50 hover:text-red-500 flex items-center justify-center transition-all font-bold text-xs"
-                                            >
-                                                ✕
-                                            </button>
-                                        </div>
-                                        
-                                        {/* Inputs */}
-                                        <input 
-                                            className="w-full bg-slate-50 p-3 rounded-xl font-black text-sm uppercase outline-none focus:bg-white focus:ring-2 focus:ring-blue-100 transition-all" 
-                                            value={val.title} 
-                                            onChange={e => {
-                                                const newList = [...founderProfile.valuesList];
-                                                newList[idx].title = e.target.value;
-                                                setFounderProfile({ ...founderProfile, valuesList: newList });
-                                            }} 
-                                            placeholder="VALUE TITLE" 
-                                        />
-                                        <input 
-                                            className="w-full bg-transparent p-2 text-xs font-bold text-slate-500 outline-none border-b border-dashed border-slate-200 focus:border-blue-400" 
-                                            value={val.desc} 
-                                            onChange={e => {
-                                                const newList = [...founderProfile.valuesList];
-                                                newList[idx].desc = e.target.value;
-                                                setFounderProfile({ ...founderProfile, valuesList: newList });
-                                            }} 
-                                            placeholder="Short description..." 
-                                        />
+                                                }} 
+                                                placeholder="VALUE TITLE" 
+                                            />
+                                            <input 
+                                                aria-label={`Value Description ${idx + 1}`}
+                                                className="w-full bg-transparent p-2 text-xs font-bold text-slate-500 outline-none border-b border-dashed border-slate-200 focus:border-blue-400" 
+                                                value={val.desc} 
+                                                onChange={e => {
+                                                    const newList = [...founderProfile.valuesList];
+                                                    newList[idx].desc = e.target.value;
+                                                    setFounderProfile({ ...founderProfile, valuesList: newList });
+                                                }} 
+                                                placeholder="Short description..." 
+                                            />
                                     </div>
                                 ))}
 
@@ -1466,7 +1491,7 @@ const handleMarkActive = async (id: string) => {
             </div>
         )}
 
-        {/* TAB 6: COUPONS (High-Fidelity) */}
+{/* TAB 6: COUPONS (High-Fidelity) */}
         {activeTab === "coupons" && (
             <div className="w-full h-full overflow-y-auto bg-slate-50/50 p-6 md:p-10">
                 <div className="max-w-5xl mx-auto">
@@ -1491,24 +1516,44 @@ const handleMarkActive = async (id: string) => {
                             <div className="space-y-4">
                                 <div>
                                     <label className="text-[10px] font-black uppercase text-slate-400 ml-3 tracking-widest">Code</label>
-                                    <input placeholder="e.g. SUMMER20" className="w-full p-4 bg-slate-50 rounded-2xl text-lg font-mono font-black uppercase text-slate-900 outline-none focus:ring-2 focus:ring-black" value={newCoupon.code} onChange={e => setNewCoupon({...newCoupon, code: e.target.value.toUpperCase()})} />
+                                    {/* FIXED: Added aria-label */}
+                                    <input 
+                                        aria-label="Coupon Code"
+                                        placeholder="e.g. SUMMER20" 
+                                        className="w-full p-4 bg-slate-50 rounded-2xl text-lg font-mono font-black uppercase text-slate-900 outline-none focus:ring-2 focus:ring-black" 
+                                        value={newCoupon.code} 
+                                        onChange={e => setNewCoupon({...newCoupon, code: e.target.value.toUpperCase()})} 
+                                    />
                                 </div>
                                 
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
                                         <label className="text-[10px] font-black uppercase text-slate-400 ml-3 tracking-widest">Value</label>
-                                        <input type="number" className="w-full p-4 bg-slate-50 rounded-2xl font-bold outline-none" value={newCoupon.discount_value} onChange={e => setNewCoupon({...newCoupon, discount_value: Number(e.target.value)})} />
+                                        {/* FIXED: Added aria-label */}
+                                        <input 
+                                            type="number" 
+                                            aria-label="Discount Value"
+                                            className="w-full p-4 bg-slate-50 rounded-2xl font-bold outline-none" 
+                                            value={newCoupon.discount_value} 
+                                            onChange={e => setNewCoupon({...newCoupon, discount_value: Number(e.target.value)})} 
+                                        />
                                     </div>
                                     <div>
                                         <label className="text-[10px] font-black uppercase text-slate-400 ml-3 tracking-widest">Type</label>
-                                        <select className="w-full p-4 bg-slate-50 rounded-2xl font-bold outline-none appearance-none" value={newCoupon.type} onChange={e => setNewCoupon({...newCoupon, type: e.target.value as any})}>
+                                        {/* FIXED: Added aria-label */}
+                                        <select 
+                                            aria-label="Discount Type"
+                                            className="w-full p-4 bg-slate-50 rounded-2xl font-bold outline-none appearance-none" 
+                                            value={newCoupon.type} 
+                                            onChange={e => setNewCoupon({...newCoupon, type: e.target.value as any})}
+                                        >
                                             <option value="percent">% Off</option>
                                             <option value="flat">₹ Flat</option>
                                         </select>
                                     </div>
                                 </div>
 
-                                <button className="w-full py-4 bg-black text-white font-black rounded-2xl uppercase text-xs tracking-widest shadow-lg hover:scale-[1.02] transition-transform">
+                                <button type="submit" className="w-full py-4 bg-black text-white font-black rounded-2xl uppercase text-xs tracking-widest shadow-lg hover:scale-[1.02] transition-transform">
                                     Issue Coupon
                                 </button>
                             </div>
@@ -1535,6 +1580,7 @@ const handleMarkActive = async (id: string) => {
                                         </div>
                                         
                                         <button 
+                                            type="button"
                                             onClick={() => deleteCoupon(c.id)} 
                                             className="px-6 py-3 bg-red-50 text-red-500 font-bold rounded-xl text-xs uppercase hover:bg-red-500 hover:text-white transition-all w-full md:w-auto"
                                         >
@@ -1584,16 +1630,16 @@ const handleMarkActive = async (id: string) => {
                                     <div className="grid grid-cols-2 gap-4">
                                         <div className="space-y-2">
                                             <label className="text-[10px] font-black uppercase text-slate-400 ml-3 tracking-widest">Support Phone</label>
-                                            <input className="w-full p-3 bg-slate-50 rounded-xl font-bold text-sm outline-none focus:bg-white focus:ring-2 focus:ring-blue-100 transition-all" value={settings.contact_phone || ""} onChange={e => setSettings({...settings, contact_phone: e.target.value})} placeholder="+91..." />
+                                            <input aria-label="Support Phone" className="w-full p-3 bg-slate-50 rounded-xl font-bold text-sm outline-none focus:bg-white focus:ring-2 focus:ring-blue-100 transition-all" value={settings.contact_phone || ""} onChange={e => setSettings({...settings, contact_phone: e.target.value})} placeholder="+91..." />
                                         </div>
                                         <div className="space-y-2">
                                             <label className="text-[10px] font-black uppercase text-slate-400 ml-3 tracking-widest">Support Email</label>
-                                            <input className="w-full p-3 bg-slate-50 rounded-xl font-bold text-sm outline-none focus:bg-white focus:ring-2 focus:ring-blue-100 transition-all" value={settings.contact_email || ""} onChange={e => setSettings({...settings, contact_email: e.target.value})} placeholder="help@..." />
+                                            <input aria-label="Support Email" className="w-full p-3 bg-slate-50 rounded-xl font-bold text-sm outline-none focus:bg-white focus:ring-2 focus:ring-blue-100 transition-all" value={settings.contact_email || ""} onChange={e => setSettings({...settings, contact_email: e.target.value})} placeholder="help@..." />
                                         </div>
                                     </div>
                                     <div className="space-y-2">
                                         <label className="text-[10px] font-black uppercase text-slate-400 ml-3 tracking-widest">Physical Address</label>
-                                        <textarea className="w-full p-3 bg-slate-50 rounded-xl font-bold text-sm min-h-[80px] outline-none focus:bg-white focus:ring-2 focus:ring-blue-100 transition-all resize-none" rows={3} value={settings.contact_address || ""} onChange={e => setSettings({...settings, contact_address: e.target.value})} placeholder="Full Address..." />
+                                        <textarea aria-label="Address" className="w-full p-3 bg-slate-50 rounded-xl font-bold text-sm min-h-[80px] outline-none focus:bg-white focus:ring-2 focus:ring-blue-100 transition-all resize-none" rows={3} value={settings.contact_address || ""} onChange={e => setSettings({...settings, contact_address: e.target.value})} placeholder="Full Address..." />
                                     </div>
                                     <div className="space-y-2">
                                         <label className="text-[10px] font-black uppercase text-slate-400 ml-3 tracking-widest flex justify-between">
@@ -1601,6 +1647,7 @@ const handleMarkActive = async (id: string) => {
                                             {settings.map_url && <span className="text-green-500">● Valid</span>}
                                         </label>
                                         <input 
+                                            aria-label="Map URL"
                                             className="w-full p-3 bg-slate-50 rounded-xl font-bold text-xs text-slate-600 focus:text-blue-600 focus:bg-white focus:ring-2 focus:ring-blue-100 transition-all" 
                                             value={settings.map_url || ""} 
                                             onChange={e => {
@@ -1630,6 +1677,7 @@ const handleMarkActive = async (id: string) => {
                                         <label className="text-[10px] font-black uppercase text-slate-400 ml-3 tracking-widest">Business UPI ID</label>
                                         <div className="relative">
                                             <input 
+                                                aria-label="UPI ID"
                                                 className="w-full pl-10 p-4 bg-blue-50/50 rounded-xl font-bold font-mono text-sm border border-blue-100 focus:ring-2 focus:ring-blue-500 outline-none text-blue-900" 
                                                 value={settings.upi_id || ""} 
                                                 onChange={e => setSettings({...settings, upi_id: e.target.value})} 
@@ -1652,7 +1700,7 @@ const handleMarkActive = async (id: string) => {
                                             <div className="flex-1">
                                                 <label className={`block w-full py-4 text-center rounded-xl border-2 border-dashed font-bold text-[10px] uppercase tracking-widest cursor-pointer transition-all ${uploadingQr ? "bg-slate-100 border-slate-300 text-slate-400" : "border-blue-200 text-blue-600 hover:bg-blue-50 hover:border-blue-400"}`}>
                                                     {uploadingQr ? "Uploading..." : "Upload New QR"}
-                                                    <input type="file" accept="image/*" className="hidden" onChange={handleQrUpload} disabled={uploadingQr} />
+                                                    <input aria-label="Upload QR Code" type="file" accept="image/*" className="hidden" onChange={handleQrUpload} disabled={uploadingQr} />
                                                 </label>
                                             </div>
                                         </div>
@@ -1715,13 +1763,13 @@ const handleMarkActive = async (id: string) => {
                                                 <div className="grid grid-cols-2 gap-4 mb-4">
                                                     <div>
                                                         <label className="text-[9px] font-bold uppercase text-slate-400 mb-1 block">Open</label>
-                                                        <select id={`${type}-start`} className="w-full p-3 bg-white rounded-xl font-bold text-sm outline-none border border-transparent focus:border-blue-300 transition-all" defaultValue={startVal}>
+                                                        <select aria-label={`${type} Start Time`} id={`${type}-start`} className="w-full p-3 bg-white rounded-xl font-bold text-sm outline-none border border-transparent focus:border-blue-300 transition-all" defaultValue={startVal}>
                                                             {[6,7,8,9,10,11,12].map(h => <option key={h} value={`${h}:00`}>{h}:00 AM</option>)}
                                                         </select>
                                                     </div>
                                                     <div>
                                                         <label className="text-[9px] font-bold uppercase text-slate-400 mb-1 block">Close</label>
-                                                        <select id={`${type}-end`} className="w-full p-3 bg-white rounded-xl font-bold text-sm outline-none border border-transparent focus:border-blue-300 transition-all" defaultValue={endVal}>
+                                                        <select aria-label={`${type} End Time`} id={`${type}-end`} className="w-full p-3 bg-white rounded-xl font-bold text-sm outline-none border border-transparent focus:border-blue-300 transition-all" defaultValue={endVal}>
                                                             {[1,2,3,4,5,6,7,8,9,10,11].map(h => <option key={h} value={`${h}:00`}>{h}:00 PM</option>)}
                                                         </select>
                                                     </div>
@@ -1746,11 +1794,11 @@ const handleMarkActive = async (id: string) => {
                                 <div className="space-y-4">
                                     <div className="flex items-center justify-between p-5 bg-white/10 rounded-2xl border border-white/10 hover:bg-white/20 transition-all">
                                         <div><span className="font-bold block">Email Prompts</span><span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Via `mailto:`</span></div>
-                                        <input type="checkbox" className="w-6 h-6 rounded-md accent-blue-500" checked={settings.notify_email_enabled !== 'false'} onChange={e => setSettings({...settings, notify_email_enabled: e.target.checked ? 'true' : 'false'})} />
+                                        <input aria-label="Toggle Email Alerts" type="checkbox" className="w-6 h-6 rounded-md accent-blue-500" checked={settings.notify_email_enabled !== 'false'} onChange={e => setSettings({...settings, notify_email_enabled: e.target.checked ? 'true' : 'false'})} />
                                     </div>
                                     <div className="flex items-center justify-between p-5 bg-white/10 rounded-2xl border border-white/10 hover:bg-white/20 transition-all">
                                         <div><span className="font-bold block">SMS Prompts</span><span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Via `sms:`</span></div>
-                                        <input type="checkbox" className="w-6 h-6 rounded-md accent-blue-500" checked={settings.notify_sms_enabled !== 'false'} onChange={e => setSettings({...settings, notify_sms_enabled: e.target.checked ? 'true' : 'false'})} />
+                                        <input aria-label="Toggle SMS Alerts" type="checkbox" className="w-6 h-6 rounded-md accent-blue-500" checked={settings.notify_sms_enabled !== 'false'} onChange={e => setSettings({...settings, notify_sms_enabled: e.target.checked ? 'true' : 'false'})} />
                                     </div>
                                 </div>
                                 <button className="w-full py-4 bg-blue-600 text-white font-black rounded-xl uppercase text-xs tracking-[0.2em] hover:bg-blue-500 shadow-lg transition-all">Update Protocols</button>
