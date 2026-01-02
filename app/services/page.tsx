@@ -3,12 +3,12 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import Link from "next/link";
-import { motion, Variants } from "framer-motion"; // <--- Added Variants import
+import { motion, Variants } from "framer-motion"; // <--- Imported Variants
 import { ArrowRight, Sparkles, Zap, Activity, Star, Clock } from "lucide-react";
 
 const FALLBACK_IMG = "https://images.unsplash.com/photo-1544367563-12123d896889?q=80&w=1000";
 
-// --- ANIMATION VARIANTS (Typed explicitly) ---
+// --- ANIMATION VARIANTS (Typed) ---
 const containerVar: Variants = {
   hidden: { opacity: 0 },
   show: { opacity: 1, transition: { staggerChildren: 0.1 } }
@@ -32,13 +32,11 @@ export default function ServicesPage() {
       const { data } = await supabase.from("services").select("*").eq("is_active", true).order("price");
       
       if (data) {
-          // 🧠 SMART PROCESSING
           const processed = data.map(item => {
               let minPrice = item.price;
               let displayDuration = item.duration;
               let hasVariants = false;
 
-              // Logic: Find the CHEAPEST variant and use ITS duration
               if (item.variants) {
                   let vars = [];
                   try {
@@ -46,11 +44,9 @@ export default function ServicesPage() {
                   } catch(e) {}
 
                   if (Array.isArray(vars) && vars.length > 0) {
-                      // Sort by price (Lowest first)
                       vars.sort((a:any, b:any) => Number(a.price) - Number(b.price));
-                      
-                      minPrice = vars[0].price;          // Price of cheapest option
-                      displayDuration = vars[0].duration; // Duration of cheapest option
+                      minPrice = vars[0].price;
+                      displayDuration = vars[0].duration;
                       hasVariants = vars.length > 1;
                   }
               }
@@ -67,10 +63,14 @@ export default function ServicesPage() {
   return (
     <main className="min-h-screen bg-slate-50 font-sans selection:bg-blue-100 selection:text-blue-900">
       
-      {/* 🌌 HEADER SECTION */}
-      <div className="relative bg-slate-900 pt-32 pb-32 px-6 overflow-hidden">
-         <div className="absolute top-0 right-0 w-[50vw] h-[50vw] bg-blue-600/20 rounded-full blur-[120px] -translate-y-1/2 translate-x-1/4 pointer-events-none"></div>
-         <div className="absolute bottom-0 left-0 w-[40vw] h-[40vw] bg-cyan-500/10 rounded-full blur-[100px] translate-y-1/2 -translate-x-1/4 pointer-events-none"></div>
+      {/* 🌌 HEADER SECTION (Visual Fix Applied) */}
+      <div className="relative bg-slate-900 pt-32 pb-32 px-6">
+         
+         {/* 1. Background Blobs (Wrapped in overflow-hidden to prevent scrollbars) */}
+         <div className="absolute inset-0 overflow-hidden pointer-events-none">
+            <div className="absolute top-0 right-0 w-[50vw] h-[50vw] bg-blue-600/20 rounded-full blur-[120px] -translate-y-1/2 translate-x-1/4"></div>
+            <div className="absolute bottom-0 left-0 w-[40vw] h-[40vw] bg-cyan-500/10 rounded-full blur-[100px] translate-y-1/2 -translate-x-1/4"></div>
+         </div>
          
          <div className="relative z-10 max-w-7xl mx-auto text-center">
             <motion.div 
@@ -88,7 +88,8 @@ export default function ServicesPage() {
             </motion.div>
          </div>
 
-         <div className="absolute bottom-0 left-0 w-full overflow-hidden leading-none">
+         {/* 2. Wave Divider (Pushed down 1px with -bottom-1 to cover black line) */}
+         <div className="absolute -bottom-1 left-0 w-full overflow-hidden leading-none">
              <svg className="relative block w-full h-[50px] fill-slate-50" viewBox="0 0 1200 120" preserveAspectRatio="none">
                  <path d="M985.66,92.83C906.67,72,823.78,31,743.84,14.19c-82.26-17.34-168.06-16.33-250.45.39-57.84,11.73-114,31.07-172,41.86A600.21,600.21,0,0,1,0,27.35V120H1200V95.8C1132.19,118.92,1055.71,111.31,985.66,92.83Z"></path>
              </svg>
@@ -147,7 +148,6 @@ export default function ServicesPage() {
                               <h2 className="text-3xl md:text-4xl font-black tracking-tight leading-none text-slate-900 group-hover:text-blue-600 transition-colors mb-2">
                                   {s.title}
                               </h2>
-                              {/* 🕐 SMART DURATION BADGE */}
                               {s.displayDuration && (
                                 <span className="inline-flex items-center gap-1 px-2 py-1 bg-slate-100 text-slate-600 text-[10px] font-bold uppercase tracking-wider rounded border border-slate-200">
                                     <Clock size={10} /> {s.displayDuration}
@@ -156,12 +156,10 @@ export default function ServicesPage() {
                           </div>
                           
                           <div className="text-right">
-                              {/* 💰 SMART PRICE: "Starts From" only if needed */}
                               {s.hasVariants && <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Starts From</span>}
                               
                               <span className="block text-3xl font-black text-blue-600">₹{s.minPrice}</span>
                               
-                              {/* Show old price only if single variant (avoid confusion) */}
                               {s.previous_price && !s.hasVariants && (
                                   <span className="text-sm text-slate-400 line-through font-mono">₹{s.previous_price}</span>
                               )}
@@ -172,7 +170,6 @@ export default function ServicesPage() {
                           {s.description}
                       </p>
 
-                      {/* BENEFITS */}
                       {s.benefits && s.benefits.length > 0 && (
                           <div className="mb-10 grid grid-cols-2 gap-3">
                               {s.benefits.slice(0, 4).map((b: string, i: number) => (
@@ -183,7 +180,6 @@ export default function ServicesPage() {
                           </div>
                       )}
 
-                      {/* ACTIONS */}
                       <div className="flex flex-col sm:flex-row gap-4 mt-auto">
                           <Link 
                               href={`/services/${s.id}`} 
