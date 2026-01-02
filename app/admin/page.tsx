@@ -112,7 +112,7 @@ export default function AdminPage() {
   }, [activeTab]);
   
   // Filters
-  const [bookingFilter, setBookingFilter] = useState<'pending' | 'upcoming' | 'history'>('pending');
+ const [bookingFilter, setBookingFilter] = useState<'active' | 'pending' | 'upcoming' | 'history'>('pending');
 
   // Service Editor
   const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
